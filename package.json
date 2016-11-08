@@ -1,0 +1,31 @@
+{
+  "name": "stardust-webgl",
+  "description": "WebGL platform for Stardust",
+  "author": {
+    "name": "Donghao Ren",
+    "email": "donghao.ren@gmail.com",
+    "url": "https://donghaoren.org"
+  },
+  "version": "0.0.1",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:stardust-vis/stardust-webgl.git"
+  },
+  "main": "dist/stardust-webgl.js",
+  "typings": "dist/stardust-webgl.d.ts",
+  "scripts": {
+    "build:ts": "tsc -p src",
+    "build": "npm-run-all build:ts",
+    "prepublish": "npm run build",
+    "watch:ts": "tsc -w -p src",
+    "watch": "npm-run-all --parallel watch:*"
+  },
+  "dependencies": {
+    "stardust-core": "file:../stardust-core"
+  },
+  "devDependencies": {
+    "npm-run-all": "^3.0.0",
+    "typescript": "^2.0.0"
+  },
+  "license": "MIT"
+}
