@@ -21,7 +21,7 @@
     "watch": "npm-run-all --parallel watch:*"
   },
   "dependencies": {
-    "stardust-core": "file:../stardust-core"
+    "stardust-core": "0.0.1"
   },
   "devDependencies": {
     "npm-run-all": "^3.0.0",
