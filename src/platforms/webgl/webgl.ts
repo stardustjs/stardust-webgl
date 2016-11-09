@@ -1,4 +1,4 @@
-import { Specification, Shape, Type, Binding, Platform, PlatformShape } from "stardust-core";
+import { Specification, Shape, Type, Binding, Platform, PlatformShape, PlatformShapeData } from "stardust-core";
 import { FlattenEmits } from "stardust-core";
 import { Dictionary, timeTask } from "stardust-core";
 import { Generator, GenerateMode, ViewType } from "./generator";
@@ -73,6 +73,11 @@ class WebGLPlatformShapeProgram {
     }
 }
 
+export class WebGLPlatformShapeData extends PlatformShapeData {
+    public buffers: Dictionary<WebGLBuffer>;
+    public vertexCount: number;
+}
+
 export class WebGLPlatformShape extends PlatformShape {
     private _shape: Shape;
     private _platform: WebGLPlatform;
@@ -87,9 +92,6 @@ export class WebGLPlatformShape extends PlatformShape {
     private _program: WebGLPlatformShapeProgram;
     private _programPick: WebGLPlatformShapeProgram;
     private _pickIndex: number;
-
-    private _buffers: Dictionary<WebGLBuffer>;
-    private _vertexCount: number;
 
     constructor(platform: WebGLPlatform, GL: WebGLRenderingContext, shape: Shape, spec: Specification.Shape, bindings: Dictionary<Binding>) {
         super();
@@ -118,25 +120,32 @@ export class WebGLPlatformShape extends PlatformShape {
             GenerateMode.PICK
         );
 
-        this.initializeBuffers();
+        this.initializeUniforms();
     }
-    public initializeBuffers() {
-        let GL = this._GL;
-        this._buffers = new Dictionary<WebGLBuffer>();
+    public initializeUniforms() {
         for(let name in this._specFlattened.input) {
             if(this.isUniform(name)) {
                 this.updateUniform(name, this._bindings.get(name).specValue);
-            } else {
+            }
+        }
+    }
+    public initializeBuffers(): WebGLPlatformShapeData {
+        let GL = this._GL;
+        let data = new WebGLPlatformShapeData();
+        data.buffers = new Dictionary<WebGLBuffer>();;
+        for(let name in this._specFlattened.input) {
+            if(!this.isUniform(name)) {
                 let location = this._program.getAttribLocation(name);
                 if(location != null) {
-                    this._buffers.set(name, GL.createBuffer());
+                    data.buffers.set(name, GL.createBuffer());
                 }
             }
         }
         if(this._programPick) {
-            this._buffers.set("s3_pick_index", GL.createBuffer());
+            data.buffers.set("s3_pick_index", GL.createBuffer());
         }
-        this._vertexCount = 0;
+        data.vertexCount = 0;
+        return data;
     }
     // Is the input attribute compiled as uniform?
     public isUniform(name: string): boolean {
@@ -158,14 +167,16 @@ export class WebGLPlatformShape extends PlatformShape {
             this._programPick.setUniform(name, type, value);
         }
     }
-    public uploadData(data: any[]): void {
+    public uploadData(data: any[]): PlatformShapeData {
+        let buffers = this.initializeBuffers();
+
         let n = data.length;
         let GL = this._GL;
         let bindings = this._bindings;
         let rep = this._flattenedVertexCount;
 
         this._bindings.forEach((binding, name) => {
-            let buffer = this._buffers.get(name);
+            let buffer = buffers.buffers.get(name);
             if(buffer == null) return;
 
             let type = binding.type;
@@ -180,7 +191,7 @@ export class WebGLPlatformShape extends PlatformShape {
         for(let i = 0; i < n * rep; i++) {
             array[i] = i % rep;
         }
-        GL.bindBuffer(GL.ARRAY_BUFFER, this._buffers.get(this._flattenedVertexIndexVariable));
+        GL.bindBuffer(GL.ARRAY_BUFFER, buffers.buffers.get(this._flattenedVertexIndexVariable));
         GL.bufferData(GL.ARRAY_BUFFER, array, GL.STATIC_DRAW);
         // The pick index attribute.
         if(this._programPick) {
@@ -192,15 +203,16 @@ export class WebGLPlatformShape extends PlatformShape {
                 array[i * 4 + 2] = ((index & 0xff0000) >> 16) / 255.0;
                 array[i * 4 + 3] = ((index & 0xff000000) >> 24) / 255.0;
             }
-            GL.bindBuffer(GL.ARRAY_BUFFER, this._buffers.get("s3_pick_index"));
+            GL.bindBuffer(GL.ARRAY_BUFFER, buffers.buffers.get("s3_pick_index"));
             GL.bufferData(GL.ARRAY_BUFFER, array, GL.STATIC_DRAW);
         }
-        this._vertexCount = n * rep;
+        buffers.vertexCount = n * rep;
+        return buffers;
     }
 
     // Render the graphics.
-    public renderBase(mode: GenerateMode): void {
-        if(this._vertexCount > 0) {
+    public renderBase(buffers: WebGLPlatformShapeData, mode: GenerateMode): void {
+        if(buffers.vertexCount > 0) {
             let GL = this._GL;
             let spec = this._specFlattened;
             let bindings = this._bindings;
@@ -215,7 +227,7 @@ export class WebGLPlatformShape extends PlatformShape {
             for(let name in spec.input) {
                 let attributeLocation = program.getAttribLocation(name);
                 if(attributeLocation == null) continue;
-                GL.bindBuffer(GL.ARRAY_BUFFER, this._buffers.get(name));
+                GL.bindBuffer(GL.ARRAY_BUFFER, buffers.buffers.get(name));
                 GL.enableVertexAttribArray(attributeLocation);
                 if(name == this._flattenedVertexIndexVariable) {
                     GL.vertexAttribPointer(attributeLocation,
@@ -232,7 +244,7 @@ export class WebGLPlatformShape extends PlatformShape {
 
             if(mode == GenerateMode.PICK) {
                 let attributeLocation = program.getAttribLocation("s3_pick_index");
-                GL.bindBuffer(GL.ARRAY_BUFFER, this._buffers.get("s3_pick_index"));
+                GL.bindBuffer(GL.ARRAY_BUFFER, buffers.buffers.get("s3_pick_index"));
                 GL.enableVertexAttribArray(attributeLocation);
                 GL.vertexAttribPointer(attributeLocation,
                     4, GL.FLOAT,
@@ -281,7 +293,7 @@ export class WebGLPlatformShape extends PlatformShape {
                 );
             }
 
-            GL.drawArrays(GL.TRIANGLES, 0, this._vertexCount);
+            GL.drawArrays(GL.TRIANGLES, 0, buffers.vertexCount);
 
             for(let name in spec.input) {
                 let attributeLocation = program.getAttribLocation(name);
@@ -300,11 +312,11 @@ export class WebGLPlatformShape extends PlatformShape {
         this._pickIndex = index;
     }
 
-    public render() {
+    public render(buffers: PlatformShapeData) {
         if(this._platform.renderMode == GenerateMode.PICK) {
             this.setPickIndex(this._platform.assignPickIndex(this._shape));
         }
-        this.renderBase(this._platform.renderMode);
+        this.renderBase(buffers as WebGLPlatformShapeData, this._platform.renderMode);
     }
 }
 

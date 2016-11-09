@@ -105,26 +105,26 @@ ImplementSimpleFunction("quat_rotate", [ "Quaternion", "Vector3" ], "Vector3", "
     }
 `);
 
-ImplementSimpleFunction("lab2rgb", [ "Color" ], "Color", "s3_lab2rgb", `
-    vec3 s3_lab2rgb_curve(float v) {
-        float p = pow(v, 3);
+let colorCode = `
+    float s3_lab2rgb_curve(float v) {
+        float p = pow(v, 3.0);
         if(p > 0.008856) {
             return p;
         } else {
             return (v - 16.0 / 116.0) / 7.787;
         }
     }
-    vec3 s3_lab2rgb_curve2(float v) {
+    float s3_lab2rgb_curve2(float v) {
         if(v > 0.0031308) {
-            return 1.055 * pow(v , (1 / 2.4)) - 0.055;
+            return 1.055 * pow(v , (1.0 / 2.4)) - 0.055;
         } else {
-            return 12.92 * var_R;
+            return 12.92 * v;
         }
     }
     vec4 s3_lab2rgb(vec4 lab) {
-        float var_Y = (lab.x + 16.0) / 116.0;
-        float var_X = lab.y / 500.0 + var_Y;
-        float var_Z = var_Y - lab.z / 200.0;
+        float var_Y = (lab.x + 0.160) / 1.160;
+        float var_X = lab.y / 5.0 + var_Y;
+        float var_Z = var_Y - lab.z / 2.0;
 
         var_X = s3_lab2rgb_curve(var_X) * 0.95047;
         var_Y = s3_lab2rgb_curve(var_Y);
@@ -138,9 +138,16 @@ ImplementSimpleFunction("lab2rgb", [ "Color" ], "Color", "s3_lab2rgb", `
         var_G = s3_lab2rgb_curve2(var_G);
         var_B = s3_lab2rgb_curve2(var_B);
 
-        return vec3(var_R, var_G, var_B, lab.a);
+        return vec4(var_R, var_G, var_B, lab.a);
     }
-`);
+    vec4 s3_hcl2rgb(vec4 hcl) {
+        vec4 lab = vec4(hcl.z, hcl.y * cos(hcl.x), hcl.y * sin(hcl.x), hcl.a);
+        return s3_lab2rgb(lab);
+    }
+`;
+
+ImplementSimpleFunction("lab2rgb", [ "Color" ], "Color", "s3_lab2rgb", colorCode);
+ImplementSimpleFunction("hcl2rgb", [ "Color" ], "Color", "s3_hcl2rgb", colorCode);
 
 ImplementSimpleFunction("sqrt", [ "float" ], "float", "sqrt");
 ImplementSimpleFunction("exp", [ "float" ], "float", "exp");
