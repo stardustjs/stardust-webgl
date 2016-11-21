@@ -1,4 +1,4 @@
-import { Specification, Shape, Type, Binding, Platform, PlatformShape, PlatformShapeData } from "stardust-core";
+import { Specification, Shape, Type, Binding, ShiftBinding, Platform, PlatformShape, PlatformShapeData } from "stardust-core";
 import { FlattenEmits } from "stardust-core";
 import { Dictionary, timeTask } from "stardust-core";
 import { Generator, GenerateMode, ViewType } from "./generator";
@@ -12,7 +12,13 @@ class WebGLPlatformShapeProgram {
     private _uniformLocations: Dictionary<WebGLUniformLocation>;
     private _attribLocations: Dictionary<number>;
 
-    constructor(GL: WebGLRenderingContext, spec: Specification.Shape, asUniform: (name: string) => boolean, viewType: ViewType, mode: GenerateMode) {
+    constructor(
+        GL: WebGLRenderingContext,
+        spec: Specification.Shape,
+        asUniform: (name: string) => boolean,
+        viewType: ViewType,
+        mode: GenerateMode
+    ) {
         this._GL = GL;
         let generator = new Generator(viewType, mode);
         generator.compileSpecification(spec, asUniform);
@@ -83,6 +89,7 @@ export class WebGLPlatformShape extends PlatformShape {
     private _platform: WebGLPlatform;
     private _GL: WebGLRenderingContext;
     private _bindings: Dictionary<Binding>;
+    private _shiftBindings: Dictionary<ShiftBinding>;
     private _spec: Specification.Shape;
 
     private _specFlattened: Specification.Shape;
@@ -93,12 +100,20 @@ export class WebGLPlatformShape extends PlatformShape {
     private _programPick: WebGLPlatformShapeProgram;
     private _pickIndex: number;
 
-    constructor(platform: WebGLPlatform, GL: WebGLRenderingContext, shape: Shape, spec: Specification.Shape, bindings: Dictionary<Binding>) {
+    constructor(
+        platform: WebGLPlatform,
+        GL: WebGLRenderingContext,
+        shape: Shape,
+        spec: Specification.Shape,
+        bindings: Dictionary<Binding>,
+        shiftBindings: Dictionary<ShiftBinding>
+    ) {
         super();
         this._platform = platform;
         this._GL = GL;
         this._shape = shape;
         this._bindings = bindings;
+        this._shiftBindings = shiftBindings;
         this._spec = spec;
 
         let flattenedInfo = FlattenEmits(spec);
@@ -108,14 +123,14 @@ export class WebGLPlatformShape extends PlatformShape {
 
         this._program = new WebGLPlatformShapeProgram(GL,
             this._specFlattened,
-            name => this.isUniform(name),
+            (name) => this.isUniform(name),
             this._platform.viewInfo.type,
             GenerateMode.NORMAL
         );
 
         this._programPick = new WebGLPlatformShapeProgram(GL,
             this._specFlattened,
-            name => this.isUniform(name),
+            (name) => this.isUniform(name),
             this._platform.viewInfo.type,
             GenerateMode.PICK
         );
@@ -133,14 +148,15 @@ export class WebGLPlatformShape extends PlatformShape {
         let GL = this._GL;
         let data = new WebGLPlatformShapeData();
         data.buffers = new Dictionary<WebGLBuffer>();;
-        for(let name in this._specFlattened.input) {
+        this._bindings.forEach((binding, name) => {
             if(!this.isUniform(name)) {
                 let location = this._program.getAttribLocation(name);
                 if(location != null) {
                     data.buffers.set(name, GL.createBuffer());
                 }
             }
-        }
+        });
+        data.buffers.set(this._flattenedVertexIndexVariable, GL.createBuffer());
         if(this._programPick) {
             data.buffers.set("s3_pick_index", GL.createBuffer());
         }
@@ -152,10 +168,15 @@ export class WebGLPlatformShape extends PlatformShape {
         // Extra variables we add are always not uniforms.
         if(name == this._flattenedVertexIndexVariable) return false;
         if(this._bindings.get(name) == null) {
-            throw new RuntimeError(`attribute ${name} is not specified.`);
+            if(this._shiftBindings.get(name) == null) {
+                throw new RuntimeError(`attribute ${name} is not specified.`);
+            } else {
+                return !this._bindings.get(this._shiftBindings.get(name).name).isFunction;
+            }
+        } else {
+            // Look at the binding to determine.
+            return !this._bindings.get(name).isFunction;
         }
-        // Look at the binding to determine.
-        return !this._bindings.get(name).isFunction;
     }
     public updateUniform(name: string, value: Specification.Value): void {
         let binding = this._bindings.get(name);
@@ -217,6 +238,7 @@ export class WebGLPlatformShape extends PlatformShape {
             let spec = this._specFlattened;
             let bindings = this._bindings;
 
+            // Decide which program to use
             let program = this._program;
             if(mode == GenerateMode.PICK) {
                 program = this._programPick;
@@ -224,24 +246,44 @@ export class WebGLPlatformShape extends PlatformShape {
 
             program.use();
 
+            let minOffset = 0;
+            let maxOffset = 0;
+            this._shiftBindings.forEach((shift, name) => {
+                if(shift.offset > maxOffset) maxOffset = shift.offset;
+                if(shift.offset < minOffset) minOffset = shift.offset;
+            });
+
+            // Assign attributes to buffers
             for(let name in spec.input) {
                 let attributeLocation = program.getAttribLocation(name);
                 if(attributeLocation == null) continue;
-                GL.bindBuffer(GL.ARRAY_BUFFER, buffers.buffers.get(name));
-                GL.enableVertexAttribArray(attributeLocation);
-                if(name == this._flattenedVertexIndexVariable) {
-                    GL.vertexAttribPointer(attributeLocation,
-                        1, GL.FLOAT, false, 0, 0
-                    );
-                } else {
-                    let type = bindings.get(name).type;
+                if(this._shiftBindings.has(name)) {
+                    let shift = this._shiftBindings.get(name);
+                    GL.bindBuffer(GL.ARRAY_BUFFER, buffers.buffers.get(shift.name));
+                    GL.enableVertexAttribArray(attributeLocation);
+                    let type = bindings.get(shift.name).type;
                     GL.vertexAttribPointer(attributeLocation,
                         type.primitiveCount, type.primitive == "float" ? GL.FLOAT : GL.INT,
-                        false, 0, 0
+                        false, 0, type.size * (shift.offset - minOffset) * this._flattenedVertexCount
                     );
+                } else {
+                    GL.bindBuffer(GL.ARRAY_BUFFER, buffers.buffers.get(name));
+                    GL.enableVertexAttribArray(attributeLocation);
+                    if(name == this._flattenedVertexIndexVariable) {
+                        GL.vertexAttribPointer(attributeLocation,
+                            1, GL.FLOAT, false, 0, 4 * (-minOffset) * this._flattenedVertexCount
+                        );
+                    } else {
+                        let type = bindings.get(name).type;
+                        GL.vertexAttribPointer(attributeLocation,
+                            type.primitiveCount, type.primitive == "float" ? GL.FLOAT : GL.INT,
+                            false, 0, type.size * (-minOffset) * this._flattenedVertexCount
+                        );
+                    }
                 }
             }
 
+            // For pick mode, assign the pick index buffer
             if(mode == GenerateMode.PICK) {
                 let attributeLocation = program.getAttribLocation("s3_pick_index");
                 GL.bindBuffer(GL.ARRAY_BUFFER, buffers.buffers.get("s3_pick_index"));
@@ -252,7 +294,7 @@ export class WebGLPlatformShape extends PlatformShape {
                 );
             }
 
-            // Set view uniforms.
+            // Set view uniforms
             let viewInfo = this._platform.viewInfo;
             let pose = this._platform.pose;
             switch(viewInfo.type) {
@@ -287,20 +329,24 @@ export class WebGLPlatformShape extends PlatformShape {
                 } break;
             }
 
+            // For pick, set the shape index
             if(mode == GenerateMode.PICK) {
                 GL.uniform1f(program.getUniformLocation("s3_pick_index_alpha"),
                     this._pickIndex / 255.0
                 );
             }
 
-            GL.drawArrays(GL.TRIANGLES, 0, buffers.vertexCount);
+            // Draw arrays
+            GL.drawArrays(GL.TRIANGLES, 0, buffers.vertexCount - (maxOffset - minOffset) * this._flattenedVertexCount);
 
+            // Unbind attributes
             for(let name in spec.input) {
                 let attributeLocation = program.getAttribLocation(name);
                 if(attributeLocation != null) {
                     GL.disableVertexAttribArray(attributeLocation);
                 }
             }
+            // Unbind the pick index buffer
             if(mode == GenerateMode.PICK) {
                 let attributeLocation = program.getAttribLocation("s3_pick_index");
                 GL.disableVertexAttribArray(attributeLocation);
@@ -331,10 +377,10 @@ export interface WebGLViewInfo {
 }
 
 export class WebGLPlatform extends Platform {
-    private _GL: WebGLRenderingContext;
-    private _viewInfo: WebGLViewInfo;
-    private _pose: Pose;
-    private _renderMode: GenerateMode;
+    protected _GL: WebGLRenderingContext;
+    protected _viewInfo: WebGLViewInfo;
+    protected _pose: Pose;
+    protected _renderMode: GenerateMode;
 
     constructor(GL: WebGLRenderingContext) {
         super();
@@ -350,11 +396,11 @@ export class WebGLPlatform extends Platform {
     public get pose(): Pose { return this._pose; };
     public get renderMode(): GenerateMode { return this._renderMode; }
 
-    private _pickFramebuffer: WebGLFramebuffer;
-    private _pickFramebufferTexture: WebGLTexture;
-    private _pickFramebufferWidth: number;
-    private _pickFramebufferHeight: number;
-    private _pickShapes: Shape[];
+    protected _pickFramebuffer: WebGLFramebuffer;
+    protected _pickFramebufferTexture: WebGLTexture;
+    protected _pickFramebufferWidth: number;
+    protected _pickFramebufferHeight: number;
+    protected _pickShapes: Shape[];
 
     public getPickFramebuffer(width: number, height: number): WebGLFramebuffer {
         if(this._pickFramebuffer == null || width != this._pickFramebufferWidth || height != this._pickFramebufferHeight) {
@@ -443,7 +489,119 @@ export class WebGLPlatform extends Platform {
         this._pose = pose;
     }
 
-    public compile(shape: Shape, spec: Specification.Shape, bindings: Dictionary<Binding>): PlatformShape {
-        return new WebGLPlatformShape(this, this._GL, shape, spec, bindings);
+    public compile(shape: Shape, spec: Specification.Shape, bindings: Dictionary<Binding>, shiftBindings: Dictionary<ShiftBinding>): PlatformShape {
+        return new WebGLPlatformShape(this, this._GL, shape, spec, bindings, shiftBindings);
+    }
+}
+
+export class WebGLCanvasPlatform2D extends WebGLPlatform {
+    protected _pixelRatio: number;
+    protected _canvas: HTMLCanvasElement;
+    protected _width: number;
+    protected _height: number;
+
+
+    constructor(canvas: HTMLCanvasElement, width: number = 600, height: number = 400) {
+        let GL = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+        super(GL);
+        this._canvas = canvas;
+
+        GL.clearColor(1, 1, 1, 1);
+        GL.clear(GL.COLOR_BUFFER_BIT | GL.DEPTH_BUFFER_BIT);
+        GL.disable(GL.DEPTH_TEST);
+        GL.enable(GL.BLEND);
+        GL.disable(GL.CULL_FACE);
+        GL.blendFuncSeparate(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA, GL.ONE, GL.ONE_MINUS_SRC_ALPHA);
+
+        this._pixelRatio = 2;
+        this.resize(width, height);
+    }
+
+    public set pixelRatio(value: number) {
+        this._pixelRatio = value;
+        this.resize(this._width, this._height);
+    }
+
+    public get pixelRatio(): number {
+        return this._pixelRatio;
+    }
+
+    public resize(width: number, height: number) {
+        this._width = width;
+        this._height = height;
+        this._canvas.style.width = width + "px";
+        this._canvas.style.height = height + "px";
+        this._canvas.width = width * this._pixelRatio;
+        this._canvas.height = height * this._pixelRatio;
+        this.set2DView(width, height);
+        this.setPose(new Pose());
+        this._GL.viewport(0, 0, this._canvas.width, this._canvas.height);
+    }
+
+    public clear(color?: number[]) {
+        if(color) {
+            this._GL.clearColor(color[0], color[1], color[2], color[3] != null ? color[3] : 1);
+        }
+        this._GL.clear(this._GL.COLOR_BUFFER_BIT | this._GL.DEPTH_BUFFER_BIT);
+    }
+}
+
+export class WebGLCanvasPlatform3D extends WebGLPlatform {
+    protected _pixelRatio: number;
+    protected _canvas: HTMLCanvasElement;
+    protected _width: number;
+    protected _height: number;
+
+
+    constructor(canvas: HTMLCanvasElement, width: number = 600, height: number = 400) {
+        let GL = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+        super(GL);
+
+        this._canvas = canvas;
+
+        GL.clearColor(1, 1, 1, 1);
+        GL.clear(GL.COLOR_BUFFER_BIT | GL.DEPTH_BUFFER_BIT);
+        GL.enable(GL.DEPTH_TEST);
+        GL.enable(GL.BLEND);
+        GL.disable(GL.CULL_FACE);
+        GL.blendFuncSeparate(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA, GL.ONE, GL.ONE_MINUS_SRC_ALPHA);
+
+        this._pixelRatio = 2;
+        this.resize(width, height);
+    }
+
+    public set pixelRatio(value: number) {
+        this._pixelRatio = value;
+        this.resize(this._width, this._height);
+    }
+
+    public get pixelRatio(): number {
+        return this._pixelRatio;
+    }
+
+    public resize(width: number, height: number) {
+        this._width = width;
+        this._height = height;
+        this._canvas.style.width = width + "px";
+        this._canvas.style.height = height + "px";
+        this._canvas.width = width * this._pixelRatio;
+        this._canvas.height = height * this._pixelRatio;
+        this.setPose(new Pose());
+        this._GL.viewport(0, 0, this._canvas.width, this._canvas.height);
+    }
+
+    public set3DView(fovY: number, near: number = 0.1, far: number = 1000) {
+        super.set3DView(fovY, this._width / this._height, near, far);
+    }
+
+    public setMVPMatrix(matrix: number[]) {
+        throw new RuntimeError("not implemented");
+    }
+
+    public clear(color?: number[]) {
+        if(color) {
+            this._GL.clearColor(color[0], color[1], color[2], color[3] != null ? color[3] : 1);
+        }
+        this._GL.clear(this._GL.COLOR_BUFFER_BIT | this._GL.DEPTH_BUFFER_BIT);
     }
 }

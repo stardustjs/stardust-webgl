@@ -24,6 +24,7 @@ export class Generator {
     private _lines: string[];
     private _currentIndent: string;
     private _hasColor: boolean;
+    private _hasNormal: boolean;
     private _positionType: string;
 
     constructor(viewType: ViewType, mode: GenerateMode = GenerateMode.NORMAL) {
@@ -72,6 +73,9 @@ export class Generator {
         }
         if(name == "out_color") {
             this._hasColor = true;
+        }
+        if(name == "out_normal") {
+            this._hasNormal = true;
         }
     }
 
@@ -252,13 +256,28 @@ export class Generator {
         switch(this._mode) {
             case GenerateMode.NORMAL: {
                 if(this._hasColor) {
-                    return `
-                        precision highp float;
-                        varying vec4 out_color;
-                        void main() {
-                            gl_FragColor = out_color;
-                        }
-                    `;
+                    if(this._hasNormal) {
+                        return `
+                            precision highp float;
+                            varying vec4 out_color;
+                            varying vec3 out_normal;
+                            varying vec3 out_position;
+                            uniform vec3 s3_view_position;
+                            void main() {
+                                vec3 lighting = normalize(out_position - s3_view_position);
+                                float NdotL = abs(dot(out_normal, lighting));
+                                gl_FragColor = vec4((NdotL * 0.5 + 0.5) * out_color.rgb, out_color.a);
+                            }
+                        `;
+                    } else {
+                        return `
+                            precision highp float;
+                            varying vec4 out_color;
+                            void main() {
+                                gl_FragColor = out_color;
+                            }
+                        `;
+                    }
                 } else {
                     return `
                         precision highp float;
