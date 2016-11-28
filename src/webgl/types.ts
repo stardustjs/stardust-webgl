@@ -5,6 +5,8 @@ let typeName2WebGLTypeName: { [ name: string ]: string } = {
     "Vector2": "vec2",
     "Vector3": "vec3",
     "Vector4": "vec4",
+    "Matrix3": "mat3",
+    "Matrix4": "mat4",
     "Quaternion": "vec4",
     "Color": "vec4"
 };

@@ -81,7 +81,7 @@ class WebGLPlatformShapeProgram {
 
 export class WebGLPlatformShapeData extends PlatformShapeData {
     public buffers: Dictionary<WebGLBuffer>;
-    public vertexCount: number;
+    public ranges: [ number, number ][];
 }
 
 export class WebGLPlatformShape extends PlatformShape {
@@ -160,7 +160,7 @@ export class WebGLPlatformShape extends PlatformShape {
         if(this._programPick) {
             data.buffers.set("s3_pick_index", GL.createBuffer());
         }
-        data.vertexCount = 0;
+        data.ranges = [];
         return data;
     }
     // Is the input attribute compiled as uniform?
@@ -188,36 +188,68 @@ export class WebGLPlatformShape extends PlatformShape {
             this._programPick.setUniform(name, type, value);
         }
     }
-    public uploadData(data: any[]): PlatformShapeData {
+    public uploadData(datas: any[][]): PlatformShapeData {
         let buffers = this.initializeBuffers();
+        buffers.ranges = [];
 
-        let n = data.length;
+        let repeatBegin = this._spec.repeatBegin || 0;
+        let repeatEnd = this._spec.repeatEnd || 0;
+
         let GL = this._GL;
         let bindings = this._bindings;
         let rep = this._flattenedVertexCount;
+
+        let totalCount = 0;
+        datas.forEach((data) => {
+            let n = data.length;
+            if(n == 0) {
+                buffers.ranges.push(null);
+                return;
+            } else {
+                let c1 = totalCount;
+                totalCount += n + repeatBegin + repeatEnd;
+                let c2 = totalCount;
+                buffers.ranges.push([ c1 * rep, c2 * rep ]);
+            }
+        });
 
         this._bindings.forEach((binding, name) => {
             let buffer = buffers.buffers.get(name);
             if(buffer == null) return;
 
             let type = binding.type;
-            let array = new Float32Array(type.primitiveCount * n * rep);
-            binding.fillBinary(data, rep, array);
+            let array = new Float32Array(type.primitiveCount * totalCount * rep);
+            let currentIndex = 0;
+            let multiplier = type.primitiveCount * rep;
+
+            datas.forEach((data) => {
+                if(data.length == 0) return;
+                for(let i = 0; i < repeatBegin; i++) {
+                    binding.fillBinary([ data[0] ], rep, array.subarray(currentIndex, currentIndex + multiplier));
+                    currentIndex += multiplier;
+                }
+                binding.fillBinary(data, rep, array.subarray(currentIndex, currentIndex + data.length * multiplier));
+                currentIndex += data.length * multiplier;
+                for(let i = 0; i < repeatEnd; i++) {
+                    binding.fillBinary([ data[data.length - 1] ], rep, array.subarray(currentIndex, currentIndex + multiplier));
+                    currentIndex += multiplier;
+                }
+            });
 
             GL.bindBuffer(GL.ARRAY_BUFFER, buffer);
             GL.bufferData(GL.ARRAY_BUFFER, array, GL.STATIC_DRAW);
         });
         // The vertex index attribute.
-        let array = new Float32Array(n * rep);
-        for(let i = 0; i < n * rep; i++) {
+        let array = new Float32Array(totalCount * rep);
+        for(let i = 0; i < totalCount * rep; i++) {
             array[i] = i % rep;
         }
         GL.bindBuffer(GL.ARRAY_BUFFER, buffers.buffers.get(this._flattenedVertexIndexVariable));
         GL.bufferData(GL.ARRAY_BUFFER, array, GL.STATIC_DRAW);
         // The pick index attribute.
         if(this._programPick) {
-            let array = new Float32Array(n * rep * 4);
-            for(let i = 0; i < n * rep; i++) {
+            let array = new Float32Array(totalCount * rep * 4);
+            for(let i = 0; i < totalCount * rep; i++) {
                 let index = Math.floor(i / rep);
                 array[i * 4 + 0] = (index & 0xff) / 255.0;
                 array[i * 4 + 1] = ((index & 0xff00) >> 8) / 255.0;
@@ -227,13 +259,12 @@ export class WebGLPlatformShape extends PlatformShape {
             GL.bindBuffer(GL.ARRAY_BUFFER, buffers.buffers.get("s3_pick_index"));
             GL.bufferData(GL.ARRAY_BUFFER, array, GL.STATIC_DRAW);
         }
-        buffers.vertexCount = n * rep;
         return buffers;
     }
 
     // Render the graphics.
-    public renderBase(buffers: WebGLPlatformShapeData, mode: GenerateMode): void {
-        if(buffers.vertexCount > 0) {
+    public renderBase(buffers: WebGLPlatformShapeData, mode: GenerateMode, onRender: (i: number) => void): void {
+        if(buffers.ranges.length > 0) {
             let GL = this._GL;
             let spec = this._specFlattened;
             let bindings = this._bindings;
@@ -327,6 +358,26 @@ export class WebGLPlatformShape extends PlatformShape {
                         );
                     }
                 } break;
+                case ViewType.VIEW_WEBVR: {
+                    GL.uniformMatrix4fv(program.getUniformLocation("s3_view_matrix"), false, viewInfo.viewMatrix);
+                    GL.uniformMatrix4fv(program.getUniformLocation("s3_projection_matrix"), false, viewInfo.projectionMatrix);
+                    if(pose) {
+                        // Rotation and position.
+                        GL.uniform4f(program.getUniformLocation("s3_view_rotation"),
+                            pose.rotation.x, pose.rotation.y, pose.rotation.z, pose.rotation.w
+                        );
+                        GL.uniform3f(program.getUniformLocation("s3_view_position"),
+                            pose.position.x, pose.position.y, pose.position.z
+                        );
+                    } else {
+                        GL.uniform4f(program.getUniformLocation("s3_view_rotation"),
+                            0, 0, 0, 1
+                        );
+                        GL.uniform3f(program.getUniformLocation("s3_view_position"),
+                            0, 0, 0
+                        );
+                    }
+                } break;
             }
 
             // For pick, set the shape index
@@ -337,7 +388,15 @@ export class WebGLPlatformShape extends PlatformShape {
             }
 
             // Draw arrays
-            GL.drawArrays(GL.TRIANGLES, 0, buffers.vertexCount - (maxOffset - minOffset) * this._flattenedVertexCount);
+            buffers.ranges.forEach((range, index) => {
+                if(onRender) {
+                    onRender(index);
+                }
+                if(range != null) {
+                    program.use();
+                    GL.drawArrays(GL.TRIANGLES, range[0], range[1] - range[0] - (maxOffset - minOffset) * this._flattenedVertexCount);
+                }
+            });
 
             // Unbind attributes
             for(let name in spec.input) {
@@ -358,11 +417,11 @@ export class WebGLPlatformShape extends PlatformShape {
         this._pickIndex = index;
     }
 
-    public render(buffers: PlatformShapeData) {
+    public render(buffers: PlatformShapeData, onRender: (i: number) => void) {
         if(this._platform.renderMode == GenerateMode.PICK) {
             this.setPickIndex(this._platform.assignPickIndex(this._shape));
         }
-        this.renderBase(buffers as WebGLPlatformShapeData, this._platform.renderMode);
+        this.renderBase(buffers as WebGLPlatformShapeData, this._platform.renderMode, onRender);
     }
 }
 
@@ -374,6 +433,8 @@ export interface WebGLViewInfo {
     aspectRatio?: number;
     near?: number;
     far?: number;
+    viewMatrix?: number[];
+    projectionMatrix?: number[];
 }
 
 export class WebGLPlatform extends Platform {
@@ -485,6 +546,14 @@ export class WebGLPlatform extends Platform {
         };
     }
 
+    public setWebVRView(viewMatrix: number[], projectionMatrix: number[]) {
+        this._viewInfo = {
+            type: ViewType.VIEW_WEBVR,
+            viewMatrix: viewMatrix,
+            projectionMatrix: projectionMatrix
+        };
+    }
+
     public setPose(pose: Pose) {
         this._pose = pose;
     }
@@ -567,6 +636,7 @@ export class WebGLCanvasPlatform3D extends WebGLPlatform {
         GL.blendFuncSeparate(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA, GL.ONE, GL.ONE_MINUS_SRC_ALPHA);
 
         this._pixelRatio = 2;
+        super.set3DView(Math.PI / 4, width / height, 0.1, 1000);
         this.resize(width, height);
     }
 
@@ -586,8 +656,8 @@ export class WebGLCanvasPlatform3D extends WebGLPlatform {
         this._canvas.style.height = height + "px";
         this._canvas.width = width * this._pixelRatio;
         this._canvas.height = height * this._pixelRatio;
-        this.setPose(new Pose());
         this._GL.viewport(0, 0, this._canvas.width, this._canvas.height);
+        super.set3DView(this._viewInfo.fovY, this._width / this._height, this._viewInfo.near, this._viewInfo.far);
     }
 
     public set3DView(fovY: number, near: number = 0.1, far: number = 1000) {
@@ -596,6 +666,62 @@ export class WebGLCanvasPlatform3D extends WebGLPlatform {
 
     public setMVPMatrix(matrix: number[]) {
         throw new RuntimeError("not implemented");
+    }
+
+    public clear(color?: number[]) {
+        if(color) {
+            this._GL.clearColor(color[0], color[1], color[2], color[3] != null ? color[3] : 1);
+        }
+        this._GL.clear(this._GL.COLOR_BUFFER_BIT | this._GL.DEPTH_BUFFER_BIT);
+    }
+}
+
+export class WebGLCanvasPlatformWebVR extends WebGLPlatform {
+    protected _pixelRatio: number;
+    protected _canvas: HTMLCanvasElement;
+    protected _width: number;
+    protected _height: number;
+
+    constructor(canvas: HTMLCanvasElement, width: number = 600, height: number = 400) {
+        let GL = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+        super(GL);
+
+        this._canvas = canvas;
+
+        GL.clearColor(1, 1, 1, 1);
+        GL.clear(GL.COLOR_BUFFER_BIT | GL.DEPTH_BUFFER_BIT);
+        GL.enable(GL.DEPTH_TEST);
+        GL.enable(GL.BLEND);
+        GL.disable(GL.CULL_FACE);
+        GL.blendFuncSeparate(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA, GL.ONE, GL.ONE_MINUS_SRC_ALPHA);
+
+        this._pixelRatio = 2;
+        this.resize(width, height);
+        this.setWebVRView([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+    }
+
+    public set pixelRatio(value: number) {
+        this._pixelRatio = value;
+        this.resize(this._width, this._height);
+    }
+
+    public get pixelRatio(): number {
+        return this._pixelRatio;
+    }
+
+    public resize(width: number, height: number) {
+        this._width = width;
+        this._height = height;
+        this._canvas.width = width * this._pixelRatio;
+        this._canvas.height = height * this._pixelRatio;
+    }
+
+    public set3DView(fovY: number, near: number = 0.1, far: number = 1000) {
+        super.set3DView(fovY, this._width / this._height, near, far);
+    }
+
+    public setWebVRView(viewMatrix: number[], projectionMatrix: number[]) {
+        super.setWebVRView(viewMatrix, projectionMatrix);
     }
 
     public clear(color?: number[]) {

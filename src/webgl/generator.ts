@@ -12,7 +12,8 @@ export enum GenerateMode {
 
 export enum ViewType {
     VIEW_2D = 0,
-    VIEW_3D = 1
+    VIEW_3D = 1,      // 3D mode.
+    VIEW_WEBVR = 2    // WebVR mode.
 }
 
 
@@ -212,6 +213,22 @@ export class Generator {
                         r.z = v.z * s3_view_params.z + s3_view_params.w;
                         r.w = -v.z;
                         return r;
+                    }
+                `)
+            } break;
+            case ViewType.VIEW_WEBVR: {
+                // For WebVR, we use the MVP matrix provided by it.
+                this.addUniform("s3_projection_matrix", "Matrix4");
+                this.addUniform("s3_view_matrix", "Matrix4");
+                this.addUniform("s3_view_position", "Vector3");
+                this.addUniform("s3_view_rotation", "Vector4");
+                this.addAdditionalCode(`
+                    vec4 s3_render_vertex(vec3 p) {
+                        vec3 v = p - s3_view_position;
+                        float d = dot(s3_view_rotation.xyz, v);
+                        vec3 c = cross(s3_view_rotation.xyz, v);
+                        v = s3_view_rotation.w * s3_view_rotation.w * v - (s3_view_rotation.w + s3_view_rotation.w) * c + d * s3_view_rotation.xyz - cross(c, s3_view_rotation.xyz);
+                        return s3_projection_matrix * s3_view_matrix * vec4(v, 1);
                     }
                 `)
             } break;
