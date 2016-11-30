@@ -170,7 +170,7 @@ export class Generator {
         }
     }
 
-    public compileSpecification(spec: Specification.Shape, asUniform: (name: string) => boolean) {
+    public compileSpecification(spec: Specification.Mark, asUniform: (name: string) => boolean) {
         this.addLine("precision highp float;");
         // Global attributes.
         for(let name in spec.input) {

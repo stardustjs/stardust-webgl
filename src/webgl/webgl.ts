@@ -1,12 +1,12 @@
-import { Specification, Shape, Type, Binding, ShiftBinding, Platform, PlatformShape, PlatformShapeData } from "stardust-core";
-import { FlattenEmits } from "stardust-core";
+import { Specification, Mark, Type, Binding, ShiftBinding, Platform, PlatformMark, PlatformMarkData } from "stardust-core";
+import { flattenEmits } from "stardust-core";
 import { Dictionary, timeTask } from "stardust-core";
 import { Generator, GenerateMode, ViewType } from "./generator";
 import { RuntimeError } from "stardust-core";
 import { Pose } from "stardust-core";
 import * as WebGLUtils from "./webglutils";
 
-class WebGLPlatformShapeProgram {
+class WebGLPlatformMarkProgram {
     private _GL: WebGLRenderingContext;
     private _program: WebGLProgram;
     private _uniformLocations: Dictionary<WebGLUniformLocation>;
@@ -14,7 +14,7 @@ class WebGLPlatformShapeProgram {
 
     constructor(
         GL: WebGLRenderingContext,
-        spec: Specification.Shape,
+        spec: Specification.Mark,
         asUniform: (name: string) => boolean,
         viewType: ViewType,
         mode: GenerateMode
@@ -79,56 +79,56 @@ class WebGLPlatformShapeProgram {
     }
 }
 
-export class WebGLPlatformShapeData extends PlatformShapeData {
+export class WebGLPlatformMarkData extends PlatformMarkData {
     public buffers: Dictionary<WebGLBuffer>;
     public ranges: [ number, number ][];
 }
 
-export class WebGLPlatformShape extends PlatformShape {
-    private _shape: Shape;
+export class WebGLPlatformMark extends PlatformMark {
+    private _mark: Mark;
     private _platform: WebGLPlatform;
     private _GL: WebGLRenderingContext;
     private _bindings: Dictionary<Binding>;
     private _shiftBindings: Dictionary<ShiftBinding>;
-    private _spec: Specification.Shape;
+    private _spec: Specification.Mark;
 
-    private _specFlattened: Specification.Shape;
+    private _specFlattened: Specification.Mark;
     private _flattenedVertexIndexVariable: string;
     private _flattenedVertexCount: number;
 
-    private _program: WebGLPlatformShapeProgram;
-    private _programPick: WebGLPlatformShapeProgram;
+    private _program: WebGLPlatformMarkProgram;
+    private _programPick: WebGLPlatformMarkProgram;
     private _pickIndex: number;
 
     constructor(
         platform: WebGLPlatform,
         GL: WebGLRenderingContext,
-        shape: Shape,
-        spec: Specification.Shape,
+        mark: Mark,
+        spec: Specification.Mark,
         bindings: Dictionary<Binding>,
         shiftBindings: Dictionary<ShiftBinding>
     ) {
         super();
         this._platform = platform;
         this._GL = GL;
-        this._shape = shape;
+        this._mark = mark;
         this._bindings = bindings;
         this._shiftBindings = shiftBindings;
         this._spec = spec;
 
-        let flattenedInfo = FlattenEmits(spec);
+        let flattenedInfo = flattenEmits(spec);
         this._specFlattened = flattenedInfo.specification;
         this._flattenedVertexIndexVariable = flattenedInfo.indexVariable;
         this._flattenedVertexCount = flattenedInfo.count
 
-        this._program = new WebGLPlatformShapeProgram(GL,
+        this._program = new WebGLPlatformMarkProgram(GL,
             this._specFlattened,
             (name) => this.isUniform(name),
             this._platform.viewInfo.type,
             GenerateMode.NORMAL
         );
 
-        this._programPick = new WebGLPlatformShapeProgram(GL,
+        this._programPick = new WebGLPlatformMarkProgram(GL,
             this._specFlattened,
             (name) => this.isUniform(name),
             this._platform.viewInfo.type,
@@ -144,9 +144,9 @@ export class WebGLPlatformShape extends PlatformShape {
             }
         }
     }
-    public initializeBuffers(): WebGLPlatformShapeData {
+    public initializeBuffers(): WebGLPlatformMarkData {
         let GL = this._GL;
-        let data = new WebGLPlatformShapeData();
+        let data = new WebGLPlatformMarkData();
         data.buffers = new Dictionary<WebGLBuffer>();;
         this._bindings.forEach((binding, name) => {
             if(!this.isUniform(name)) {
@@ -188,7 +188,7 @@ export class WebGLPlatformShape extends PlatformShape {
             this._programPick.setUniform(name, type, value);
         }
     }
-    public uploadData(datas: any[][]): PlatformShapeData {
+    public uploadData(datas: any[][]): PlatformMarkData {
         let buffers = this.initializeBuffers();
         buffers.ranges = [];
 
@@ -263,7 +263,7 @@ export class WebGLPlatformShape extends PlatformShape {
     }
 
     // Render the graphics.
-    public renderBase(buffers: WebGLPlatformShapeData, mode: GenerateMode, onRender: (i: number) => void): void {
+    public renderBase(buffers: WebGLPlatformMarkData, mode: GenerateMode, onRender: (i: number) => void): void {
         if(buffers.ranges.length > 0) {
             let GL = this._GL;
             let spec = this._specFlattened;
@@ -380,7 +380,7 @@ export class WebGLPlatformShape extends PlatformShape {
                 } break;
             }
 
-            // For pick, set the shape index
+            // For pick, set the mark index
             if(mode == GenerateMode.PICK) {
                 GL.uniform1f(program.getUniformLocation("s3_pick_index_alpha"),
                     this._pickIndex / 255.0
@@ -417,11 +417,11 @@ export class WebGLPlatformShape extends PlatformShape {
         this._pickIndex = index;
     }
 
-    public render(buffers: PlatformShapeData, onRender: (i: number) => void) {
+    public render(buffers: PlatformMarkData, onRender: (i: number) => void) {
         if(this._platform.renderMode == GenerateMode.PICK) {
-            this.setPickIndex(this._platform.assignPickIndex(this._shape));
+            this.setPickIndex(this._platform.assignPickIndex(this._mark));
         }
-        this.renderBase(buffers as WebGLPlatformShapeData, this._platform.renderMode, onRender);
+        this.renderBase(buffers as WebGLPlatformMarkData, this._platform.renderMode, onRender);
     }
 }
 
@@ -461,7 +461,7 @@ export class WebGLPlatform extends Platform {
     protected _pickFramebufferTexture: WebGLTexture;
     protected _pickFramebufferWidth: number;
     protected _pickFramebufferHeight: number;
-    protected _pickShapes: Shape[];
+    protected _pickMarks: Mark[];
 
     public getPickFramebuffer(width: number, height: number): WebGLFramebuffer {
         if(this._pickFramebuffer == null || width != this._pickFramebufferWidth || height != this._pickFramebufferHeight) {
@@ -492,16 +492,16 @@ export class WebGLPlatform extends Platform {
         GL.clear(GL.COLOR_BUFFER_BIT);
         GL.disable(GL.BLEND);
 
-        this._pickShapes = [];
+        this._pickMarks = [];
     }
 
-    public assignPickIndex(shape: Shape): number {
-        let idx = this._pickShapes.indexOf(shape);
+    public assignPickIndex(mark: Mark): number {
+        let idx = this._pickMarks.indexOf(mark);
         if(idx >= 0) {
             return idx;
         } else {
-            let num = this._pickShapes.length;
-            this._pickShapes.push(shape);
+            let num = this._pickMarks.length;
+            this._pickMarks.push(mark);
             return num;
         }
     }
@@ -513,7 +513,7 @@ export class WebGLPlatform extends Platform {
         this._renderMode = GenerateMode.NORMAL;
     }
 
-    public getPickingPixel(x: number, y: number): [ Shape, number ] {
+    public getPickingPixel(x: number, y: number): [ Mark, number ] {
         if(x < 0 || y < 0 || x >= this._pickFramebufferWidth || y >= this._pickFramebufferHeight) {
             return null;
         }
@@ -525,7 +525,7 @@ export class WebGLPlatform extends Platform {
         GL.bindFramebuffer(GL.FRAMEBUFFER, null);
         let offset = (data[0]) + (data[1] << 8) + (data[2] << 16);
         if(offset >= 16777215) return null;
-        return [ this._pickShapes[data[3]], offset ];
+        return [ this._pickMarks[data[3]], offset ];
     }
 
     public set2DView(width: number, height: number) {
@@ -558,8 +558,8 @@ export class WebGLPlatform extends Platform {
         this._pose = pose;
     }
 
-    public compile(shape: Shape, spec: Specification.Shape, bindings: Dictionary<Binding>, shiftBindings: Dictionary<ShiftBinding>): PlatformShape {
-        return new WebGLPlatformShape(this, this._GL, shape, spec, bindings, shiftBindings);
+    public compile(mark: Mark, spec: Specification.Mark, bindings: Dictionary<Binding>, shiftBindings: Dictionary<ShiftBinding>): PlatformMark {
+        return new WebGLPlatformMark(this, this._GL, mark, spec, bindings, shiftBindings);
     }
 }
 
