@@ -166,6 +166,12 @@ ImplementSimpleFunction("ceil", [ "float" ], "float", "ceil");
 ImplementSimpleFunction("floor", [ "float" ], "float", "floor");
 
 ImplementSimpleFunction("mix", [ "float", "float", "float" ], "float", "mix");
+ImplementSimpleFunction("mix", [ "Vector2", "Vector2", "float" ], "Vector2", "mix");
+ImplementSimpleFunction("mix", [ "Vector3", "Vector3", "float" ], "Vector3", "mix");
+ImplementSimpleFunction("mix", [ "Vector4", "Vector4", "float" ], "Vector4", "mix");
+ImplementSimpleFunction("mix", [ "Color", "Color", "float" ], "Color", "mix");
+
+ImplementFunction("clamp", [ "float" ], "float", (a) => `clamp(${a}, 0, 1)`);
 
 ImplementTypeConversion("float", "int", (a) => `int(${a})`);
 ImplementTypeConversion("int", "float", (a) => `float(${a})`);
