@@ -8,7 +8,11 @@ let typeName2WebGLTypeName: { [ name: string ]: string } = {
     "Matrix3": "mat3",
     "Matrix4": "mat4",
     "Quaternion": "vec4",
-    "Color": "vec4"
+    "Color": "vec4",
+    "FloatArray": "sampler2D",
+    "Vector2Array": "sampler2D",
+    "Vector3Array": "sampler2D",
+    "Vector4Array": "sampler2D"
 };
 
 export function convertTypeName(name: string): string {

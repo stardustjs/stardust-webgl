@@ -1,4 +1,4 @@
-import { Specification, Mark, Type, Binding, ShiftBinding, Platform, PlatformMark, PlatformMarkData } from "stardust-core";
+import { Specification, Mark, Type, types, Binding, TextureBinding, TextureData, BindingType, ShiftBinding, Platform, PlatformMark, PlatformMarkData } from "stardust-core";
 import { flattenEmits } from "stardust-core";
 import { Dictionary, timeTask } from "stardust-core";
 import { Generator, GenerateMode, ViewType } from "./generator";
@@ -6,11 +6,20 @@ import { RuntimeError } from "stardust-core";
 import { Pose } from "stardust-core";
 import * as WebGLUtils from "./webglutils";
 
+interface TextureCacheData {
+    unit: number;
+    data: TextureData;
+    texture: WebGLTexture;
+};
+
 class WebGLPlatformMarkProgram {
     private _GL: WebGLRenderingContext;
     private _program: WebGLProgram;
     private _uniformLocations: Dictionary<WebGLUniformLocation>;
     private _attribLocations: Dictionary<number>;
+
+    private _textures: Dictionary<TextureCacheData>;
+    private _currentTextureUnit: number;
 
     constructor(
         GL: WebGLRenderingContext,
@@ -28,6 +37,8 @@ class WebGLPlatformMarkProgram {
         );
         this._uniformLocations = new Dictionary<WebGLUniformLocation>();
         this._attribLocations = new Dictionary<number>();
+        this._textures = new Dictionary<TextureCacheData>();
+        this._currentTextureUnit = 0;
     }
 
     public use() {
@@ -56,6 +67,56 @@ class WebGLPlatformMarkProgram {
                 case 4: GL.uniform4i(location, va[0], va[1], va[2], va[3]); break;
             }
         }
+    }
+
+    public setTexture(name: string, texture: TextureBinding) {
+        let GL = this._GL;
+        if(!this._textures.has(name)) {
+            let newTexture = GL.createTexture();
+            let unit = this._currentTextureUnit++;
+            this._textures.set(name, {
+                data: null,
+                texture: newTexture,
+                unit: unit
+            });
+            GL.bindTexture(GL.TEXTURE_2D, newTexture);
+            GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MAG_FILTER, GL.LINEAR);
+            GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.LINEAR);
+            GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE);
+            GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE);
+            GL.bindTexture(GL.TEXTURE_2D, null);
+            this.use();
+            this.setUniform(name, types["int"], unit);
+        }
+        let cache = this._textures.get(name);
+        let newData = texture.getTextureData();
+        if(cache.data == newData) {
+            return;
+        } else {
+            cache.data = newData;
+            // We need non-power-of-2 textures and floating point texture support.
+            GL.bindTexture(GL.TEXTURE_2D, cache.texture);
+            GL.texImage2D(GL.TEXTURE_2D, 0, GL.RGBA, newData.width, newData.height, 0, GL.RGBA, GL.FLOAT, newData.data);
+            GL.bindTexture(GL.TEXTURE_2D, null);
+            this.use();
+            this.setUniform(name + "_length", types["int"], newData.width);
+        }
+    }
+
+    public bindTextures() {
+        let GL = this._GL;
+        this._textures.forEach((cache) => {
+            GL.activeTexture(GL.TEXTURE0 + cache.unit);
+            GL.bindTexture(GL.TEXTURE_2D, cache.texture);
+        });
+    }
+
+    public unbindTextures() {
+        let GL = this._GL;
+        this._textures.forEach((cache) => {
+            GL.activeTexture(GL.TEXTURE0 + cache.unit);
+            GL.bindTexture(GL.TEXTURE_2D, null);
+        });
     }
 
     public getUniformLocation(name: string): WebGLUniformLocation {
@@ -140,7 +201,13 @@ export class WebGLPlatformMark extends PlatformMark {
     public initializeUniforms() {
         for(let name in this._specFlattened.input) {
             if(this.isUniform(name)) {
-                this.updateUniform(name, this._bindings.get(name).specValue);
+                let binding = this._bindings.get(name);
+                if(binding.bindingType == BindingType.VALUE) {
+                    this.updateUniform(name, binding.specValue);
+                }
+                if(binding.bindingType == BindingType.TEXTURE) {
+                    this.updateTexture(name, binding.textureValue);
+                }
             }
         }
     }
@@ -171,16 +238,16 @@ export class WebGLPlatformMark extends PlatformMark {
             if(this._shiftBindings.get(name) == null) {
                 throw new RuntimeError(`attribute ${name} is not specified.`);
             } else {
-                return !this._bindings.get(this._shiftBindings.get(name).name).isFunction;
+                return this._bindings.get(this._shiftBindings.get(name).name).bindingType != BindingType.FUNCTION;
             }
         } else {
             // Look at the binding to determine.
-            return !this._bindings.get(name).isFunction;
+            return this._bindings.get(name).bindingType != BindingType.FUNCTION;
         }
     }
-    public updateUniform(name: string, value: Specification.Value): void {
+    public updateUniform(name: string, value: Specification.Value) {
         let binding = this._bindings.get(name);
-        let type = binding.type;
+        let type = binding.valueType;
         this._program.use();
         this._program.setUniform(name, type, value);
         if(this._programPick) {
@@ -188,6 +255,13 @@ export class WebGLPlatformMark extends PlatformMark {
             this._programPick.setUniform(name, type, value);
         }
     }
+    public updateTexture(name: string, value: TextureBinding) {
+        this._program.setTexture(name, value);
+        if(this._programPick) {
+            this._programPick.setTexture(name, value);
+        }
+    }
+
     public uploadData(datas: any[][]): PlatformMarkData {
         let buffers = this.initializeBuffers();
         buffers.ranges = [];
@@ -217,7 +291,7 @@ export class WebGLPlatformMark extends PlatformMark {
             let buffer = buffers.buffers.get(name);
             if(buffer == null) return;
 
-            let type = binding.type;
+            let type = binding.valueType;
             let array = new Float32Array(type.primitiveCount * totalCount * rep);
             let currentIndex = 0;
             let multiplier = type.primitiveCount * rep;
@@ -292,7 +366,7 @@ export class WebGLPlatformMark extends PlatformMark {
                     let shift = this._shiftBindings.get(name);
                     GL.bindBuffer(GL.ARRAY_BUFFER, buffers.buffers.get(shift.name));
                     GL.enableVertexAttribArray(attributeLocation);
-                    let type = bindings.get(shift.name).type;
+                    let type = bindings.get(shift.name).valueType;
                     GL.vertexAttribPointer(attributeLocation,
                         type.primitiveCount, type.primitive == "float" ? GL.FLOAT : GL.INT,
                         false, 0, type.size * (shift.offset - minOffset) * this._flattenedVertexCount
@@ -305,7 +379,7 @@ export class WebGLPlatformMark extends PlatformMark {
                             1, GL.FLOAT, false, 0, 4 * (-minOffset) * this._flattenedVertexCount
                         );
                     } else {
-                        let type = bindings.get(name).type;
+                        let type = bindings.get(name).valueType;
                         GL.vertexAttribPointer(attributeLocation,
                             type.primitiveCount, type.primitive == "float" ? GL.FLOAT : GL.INT,
                             false, 0, type.size * (-minOffset) * this._flattenedVertexCount
@@ -387,6 +461,8 @@ export class WebGLPlatformMark extends PlatformMark {
                 );
             }
 
+            program.bindTextures();
+
             // Draw arrays
             buffers.ranges.forEach((range, index) => {
                 if(onRender) {
@@ -394,9 +470,12 @@ export class WebGLPlatformMark extends PlatformMark {
                 }
                 if(range != null) {
                     program.use();
+                    program.bindTextures();
                     GL.drawArrays(GL.TRIANGLES, range[0], range[1] - range[0] - (maxOffset - minOffset) * this._flattenedVertexCount);
                 }
             });
+
+            program.unbindTextures();
 
             // Unbind attributes
             for(let name in spec.input) {
@@ -572,6 +651,8 @@ export class WebGLCanvasPlatform2D extends WebGLPlatform {
 
     constructor(canvas: HTMLCanvasElement, width: number = 600, height: number = 400) {
         let GL = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+        GL.getExtension("OES_texture_float");
+        GL.getExtension("OES_texture_float_linear");
         super(GL);
         this._canvas = canvas;
 

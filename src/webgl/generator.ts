@@ -61,6 +61,9 @@ export class Generator {
 
     public addUniform(name: string, type: string) {
         this.addLine(`uniform ${convertTypeName(type)} ${name};`);
+        if(type == "Vector2Array" || type == "FloatArray" || type == "Vector3Array" || type == "Vector4Array") {
+            this.addLine(`uniform int ${name}_length;`);
+        }
     }
 
     public addAttribute(name: string, type: string) {

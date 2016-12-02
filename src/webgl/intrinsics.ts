@@ -176,6 +176,8 @@ ImplementFunction("clamp", [ "float" ], "float", (a) => `clamp(${a}, 0, 1)`);
 ImplementTypeConversion("float", "int", (a) => `int(${a})`);
 ImplementTypeConversion("int", "float", (a) => `float(${a})`);
 
+ImplementFunction("array", [ "Vector2Array", "float" ], "Vector2", (a, b) => `texture2D(${a}, vec2((${b} + 0.5) / float(${a}_length), 0.5)).xy`);
+
 export function generateIntrinsicFunction(name: string, args: string[]): { code: string, additionalCode: string } {
     if(intrinsicImplementations.has(name)) {
         if(intrinsicsCodeBase.has(name)) {
