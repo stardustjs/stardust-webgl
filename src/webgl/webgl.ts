@@ -651,8 +651,11 @@ export class WebGLCanvasPlatform2D extends WebGLPlatform {
 
     constructor(canvas: HTMLCanvasElement, width: number = 600, height: number = 400) {
         let GL = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
-        GL.getExtension("OES_texture_float");
-        GL.getExtension("OES_texture_float_linear");
+        try {
+            GL.getExtension("OES_texture_float");
+            GL.getExtension("OES_texture_float_linear");
+        } catch(e) {
+        }
         super(GL);
         this._canvas = canvas;
 
