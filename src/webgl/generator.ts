@@ -7,6 +7,7 @@ import { Dictionary } from "stardust-core";
 export enum GenerateMode {
     NORMAL   = 0,
     PICK     = 1,
+    FRAGMENT = 2
 }
 
 
@@ -17,7 +18,7 @@ export enum ViewType {
 }
 
 
-export class Generator {
+export class CodeGenerator {
     private _mode: GenerateMode;
     private _viewType: ViewType;
 
@@ -152,57 +153,94 @@ export class Generator {
             } break;
             case "emit": {
                 let sEmit = stat as Specification.StatementEmit;
-                for(let name in sEmit.attributes) {
-                    this.addLine(`out_${name} = ${this.generateExpression(sEmit.attributes[name])};`);
+                if(this._mode == GenerateMode.FRAGMENT) {
+                    for(let name in sEmit.attributes) {
+                        this.addLine(`fout_${name} = ${this.generateExpression(sEmit.attributes[name])};`);
+                    }
+                } else {
+                    for(let name in sEmit.attributes) {
+                        this.addLine(`out_${name} = ${this.generateExpression(sEmit.attributes[name])};`);
+                    }
                 }
                 if(this._mode == GenerateMode.PICK) {
                     this.addLine(`out_pick_index = vec4(s3_pick_index.rgb, s3_pick_index_alpha);`);
                 }
-                switch(this._positionType) {
-                    case "Vector2": {
-                        this.addLine("gl_Position = s3_render_vertex(vec3(out_position, 0.0));");
-                    } break;
-                    case "Vector3": {
-                        this.addLine("gl_Position = s3_render_vertex(out_position);");
-                    } break;
-                    case "Vector4": {
-                        this.addLine("gl_Position = s3_render_vertex(out_position.xyz);");
-                    } break;
+                if(this._mode == GenerateMode.FRAGMENT) {
+                    this.addLine("gl_FragColor = fout_color;");
+                } else {
+                    switch(this._positionType) {
+                        case "Vector2": {
+                            this.addLine("gl_Position = s3_render_vertex(vec3(out_position, 0.0));");
+                        } break;
+                        case "Vector3": {
+                            this.addLine("gl_Position = s3_render_vertex(out_position);");
+                        } break;
+                        case "Vector4": {
+                            this.addLine("gl_Position = s3_render_vertex(out_position.xyz);");
+                        } break;
+                    }
                 }
             } break;
         }
     }
 
-    public compileSpecification(spec: Specification.Mark, asUniform: (name: string) => boolean) {
-        this.addLine("precision highp float;");
+    public addStatements(stat: Specification.Statement[]) {
+        stat.forEach((s) => this.addStatement(s));
+    }
+
+    public getCode(): string {
+        return this._lines.map((line) => {
+            if(line.trim() == "@additionalCode") return this._additionalCodes.join("\n");
+            return line;
+        }).join("\n");
+    }
+}
+
+export class Generator {
+
+    private _mode: GenerateMode;
+    private _viewType: ViewType;
+
+    private _vertexCode: string;
+    private _fragmentCode: string;
+
+    constructor(viewType: ViewType, mode: GenerateMode = GenerateMode.NORMAL) {
+        this._mode = mode;
+        this._viewType = viewType;
+    }
+
+    public compileVertexShader(spec: Specification.Mark, asUniform: (name: string) => boolean): CodeGenerator {
+        let gen = new CodeGenerator(this._viewType, this._mode);
+
+        gen.addLine("precision highp float;");
         // Global attributes.
         for(let name in spec.input) {
             if(spec.input.hasOwnProperty(name)) {
                 if(asUniform(name)) {
-                    this.addUniform(name, spec.input[name].type);
+                    gen.addUniform(name, spec.input[name].type);
                 } else {
-                    this.addAttribute(name, spec.input[name].type);
+                    gen.addAttribute(name, spec.input[name].type);
                 }
             }
         }
         if(this._mode == GenerateMode.PICK) {
-            this.addAttribute("s3_pick_index", "Vector4");
-            this.addUniform("s3_pick_index_alpha", "float");
+            gen.addAttribute("s3_pick_index", "Vector4");
+            gen.addUniform("s3_pick_index_alpha", "float");
         }
         switch(this._viewType) {
             case ViewType.VIEW_2D: {
-                this.addUniform("s3_view_params", "Vector4");
-                this.addAdditionalCode(`
+                gen.addUniform("s3_view_params", "Vector4");
+                gen.addAdditionalCode(`
                     vec4 s3_render_vertex(vec3 p) {
                         return vec4(p.xy * s3_view_params.xy + s3_view_params.zw, 0.0, 1.0);
                     }
                 `);
             } break;
             case ViewType.VIEW_3D: {
-                this.addUniform("s3_view_params", "Vector4");
-                this.addUniform("s3_view_position", "Vector3");
-                this.addUniform("s3_view_rotation", "Vector4");
-                this.addAdditionalCode(`
+                gen.addUniform("s3_view_params", "Vector4");
+                gen.addUniform("s3_view_position", "Vector3");
+                gen.addUniform("s3_view_rotation", "Vector4");
+                gen.addAdditionalCode(`
                     vec4 s3_render_vertex(vec3 p) {
                         // Get position in view coordinates:
                         //   v = quaternion_inverse_rotate(rotation, p - position)
@@ -221,11 +259,11 @@ export class Generator {
             } break;
             case ViewType.VIEW_WEBVR: {
                 // For WebVR, we use the MVP matrix provided by it.
-                this.addUniform("s3_projection_matrix", "Matrix4");
-                this.addUniform("s3_view_matrix", "Matrix4");
-                this.addUniform("s3_view_position", "Vector3");
-                this.addUniform("s3_view_rotation", "Vector4");
-                this.addAdditionalCode(`
+                gen.addUniform("s3_projection_matrix", "Matrix4");
+                gen.addUniform("s3_view_matrix", "Matrix4");
+                gen.addUniform("s3_view_position", "Vector3");
+                gen.addUniform("s3_view_rotation", "Vector4");
+                gen.addAdditionalCode(`
                     vec4 s3_render_vertex(vec3 p) {
                         vec3 v = p - s3_view_position;
                         float d = dot(s3_view_rotation.xyz, v);
@@ -236,86 +274,101 @@ export class Generator {
                 `)
             } break;
         }
-        this.addLine("@additionalCode");
+        gen.addLine("@additionalCode");
         // Output attributes.
         for(let name in spec.output) {
             if(spec.output.hasOwnProperty(name)) {
-                this.addVarying("out_" + name, spec.output[name].type);
+                gen.addVarying("out_" + name, spec.output[name].type);
             }
         }
         if(this._mode == GenerateMode.PICK) {
-            this.addVarying("out_pick_index", "Vector4");
+            gen.addVarying("out_pick_index", "Vector4");
         }
         // The main function.
-        this.addLine("void main() {");
-        this.indent();
+        gen.addLine("void main() {");
+        gen.indent();
         // Define arguments.
         for(let name in spec.variables) {
             if(spec.variables.hasOwnProperty(name)) {
                 let type = spec.variables[name];
-                this.addDeclaration(name, type);
+                gen.addDeclaration(name, type);
             }
         }
-        this.addStatements(spec.statements);
-        this.unindent();
-        this.addLine("}");
+        gen.addStatements(spec.statements);
+        gen.unindent();
+        gen.addLine("}");
+
+        return gen;
     }
 
-    public addStatements(stat: Specification.Statement[]) {
-        stat.forEach((s) => this.addStatement(s));
+    public compileFragmentShader(mspec: Specification.Mark, spec: Specification.Shader, asUniform: (name: string) => boolean): CodeGenerator {
+        let gen = new CodeGenerator(this._viewType, GenerateMode.FRAGMENT);
+
+        gen.addLine("precision highp float;");
+        // Global attributes.
+        for(let name in spec.input) {
+            if(spec.input.hasOwnProperty(name)) {
+                if(mspec.output[name]) {
+                    gen.addVarying("out_" + name, spec.input[name].type);
+                } else {
+                    if(asUniform(name)) {
+                        gen.addUniform(name, spec.input[name].type);
+                    }
+                }
+            }
+        }
+        // Output attributes.
+        for(let name in spec.output) {
+            if(spec.output.hasOwnProperty(name)) {
+                gen.addDeclaration("fout_" + name, spec.output[name].type);
+            }
+        }
+        // The main function.
+        gen.addLine("void main() {");
+        gen.indent();
+        // Define arguments.
+        for(let name in spec.variables) {
+            if(spec.variables.hasOwnProperty(name)) {
+                let type = spec.variables[name];
+                gen.addDeclaration(name, type);
+            }
+        }
+        for(let name in spec.input) {
+            if(spec.input.hasOwnProperty(name)) {
+                if(mspec.output[name]) {
+                    gen.addLine(`${convertTypeName(spec.input[name].type)} ${name} = out_${name};`);
+                } else {
+                    gen.addLine(`${convertTypeName(spec.input[name].type)} ${name};`);
+                }
+            }
+        }
+        gen.addStatements(spec.statements);
+        gen.unindent();
+        gen.addLine("}");
+
+        return gen;
     }
 
-    public getCode(): string {
-        return this._lines.map((line) => {
-            if(line.trim() == "@additionalCode") return this._additionalCodes.join("\n");
-            return line;
-        }).join("\n");
+    public compileSpecification(spec: Specification.Mark, shader: Specification.Shader, asUniform: (name: string) => boolean) {
+        this._vertexCode = this.compileVertexShader(spec, asUniform).getCode();
+        if(this._mode == GenerateMode.PICK) {
+            this._fragmentCode = `
+                precision highp float;
+                varying vec4 out_pick_index;
+                void main() {
+                    gl_FragColor = out_pick_index;
+                }
+            `;
+        } else {
+            this._fragmentCode = this.compileFragmentShader(spec, shader, asUniform).getCode();
+        }
+    }
+
+    public getVertexCode(): string {
+        return this._vertexCode;
     }
 
     public getFragmentCode(): string {
-        switch(this._mode) {
-            case GenerateMode.NORMAL: {
-                if(this._hasColor) {
-                    if(this._hasNormal) {
-                        return `
-                            precision highp float;
-                            varying vec4 out_color;
-                            varying vec3 out_normal;
-                            varying vec3 out_position;
-                            uniform vec3 s3_view_position;
-                            void main() {
-                                vec3 lighting = normalize(out_position - s3_view_position);
-                                float NdotL = abs(dot(out_normal, lighting));
-                                gl_FragColor = vec4((NdotL * 0.5 + 0.5) * out_color.rgb, out_color.a);
-                            }
-                        `;
-                    } else {
-                        return `
-                            precision highp float;
-                            varying vec4 out_color;
-                            void main() {
-                                gl_FragColor = out_color;
-                            }
-                        `;
-                    }
-                } else {
-                    return `
-                        precision highp float;
-                        void main() {
-                            gl_FragColor = vec4(0, 0, 0, 1);
-                        }
-                    `;
-                }
-            }
-            case GenerateMode.PICK: {
-                return `
-                    precision highp float;
-                    varying vec4 out_pick_index;
-                    void main() {
-                        gl_FragColor = out_pick_index;
-                    }
-                `;
-            }
-        }
+        return this._fragmentCode;
     }
 }

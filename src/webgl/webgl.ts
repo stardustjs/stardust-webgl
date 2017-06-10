@@ -24,15 +24,16 @@ class WebGLPlatformMarkProgram {
     constructor(
         GL: WebGLRenderingContext,
         spec: Specification.Mark,
+        shader: Specification.Shader,
         asUniform: (name: string) => boolean,
         viewType: ViewType,
         mode: GenerateMode
     ) {
         this._GL = GL;
         let generator = new Generator(viewType, mode);
-        generator.compileSpecification(spec, asUniform);
+        generator.compileSpecification(spec, shader, asUniform);
         this._program = WebGLUtils.compileProgram(this._GL,
-            generator.getCode(),
+            generator.getVertexCode(),
             generator.getFragmentCode()
         );
         this._uniformLocations = new Dictionary<WebGLUniformLocation>();
@@ -152,6 +153,7 @@ export class WebGLPlatformMark extends PlatformMark {
     private _bindings: Dictionary<Binding>;
     private _shiftBindings: Dictionary<ShiftBinding>;
     private _spec: Specification.Mark;
+    private _shader: Specification.Shader;
 
     private _specFlattened: Specification.Mark;
     private _flattenedVertexIndexVariable: string;
@@ -166,6 +168,7 @@ export class WebGLPlatformMark extends PlatformMark {
         GL: WebGLRenderingContext,
         mark: Mark,
         spec: Specification.Mark,
+        shader: Specification.Shader,
         bindings: Dictionary<Binding>,
         shiftBindings: Dictionary<ShiftBinding>
     ) {
@@ -176,6 +179,7 @@ export class WebGLPlatformMark extends PlatformMark {
         this._bindings = bindings;
         this._shiftBindings = shiftBindings;
         this._spec = spec;
+        this._shader = shader;
 
         let flattenedInfo = flattenEmits(spec);
         this._specFlattened = flattenedInfo.specification;
@@ -184,6 +188,7 @@ export class WebGLPlatformMark extends PlatformMark {
 
         this._program = new WebGLPlatformMarkProgram(GL,
             this._specFlattened,
+            this._shader,
             (name) => this.isUniform(name),
             this._platform.viewInfo.type,
             GenerateMode.NORMAL
@@ -191,6 +196,7 @@ export class WebGLPlatformMark extends PlatformMark {
 
         this._programPick = new WebGLPlatformMarkProgram(GL,
             this._specFlattened,
+            this._shader,
             (name) => this.isUniform(name),
             this._platform.viewInfo.type,
             GenerateMode.PICK
@@ -637,8 +643,8 @@ export class WebGLPlatform extends Platform {
         this._pose = pose;
     }
 
-    public compile(mark: Mark, spec: Specification.Mark, bindings: Dictionary<Binding>, shiftBindings: Dictionary<ShiftBinding>): PlatformMark {
-        return new WebGLPlatformMark(this, this._GL, mark, spec, bindings, shiftBindings);
+    public compile(mark: Mark, spec: Specification.Mark, shader: Specification.Shader, bindings: Dictionary<Binding>, shiftBindings: Dictionary<ShiftBinding>): PlatformMark {
+        return new WebGLPlatformMark(this, this._GL, mark, spec, shader, bindings, shiftBindings);
     }
 }
 
