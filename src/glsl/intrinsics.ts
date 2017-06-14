@@ -149,6 +149,7 @@ let colorCode = `
 ImplementSimpleFunction("lab2rgb", [ "Color" ], "Color", "s3_lab2rgb", colorCode);
 ImplementSimpleFunction("hcl2rgb", [ "Color" ], "Color", "s3_hcl2rgb", colorCode);
 
+ImplementSimpleFunction("abs", [ "float" ], "float", "abs");
 ImplementSimpleFunction("sqrt", [ "float" ], "float", "sqrt");
 ImplementSimpleFunction("exp", [ "float" ], "float", "exp");
 ImplementSimpleFunction("log", [ "float" ], "float", "log");
@@ -160,6 +161,7 @@ ImplementSimpleFunction("acos", [ "float" ], "float", "acos");
 ImplementSimpleFunction("atan", [ "float" ], "float", "atan");
 ImplementSimpleFunction("atan2", [ "float", "float" ], "float", "atan2");
 
+ImplementSimpleFunction("abs", [ "int" ], "int", "abs");
 ImplementSimpleFunction("min", [ "float", "float" ], "float", "min");
 ImplementSimpleFunction("max", [ "float", "float" ], "float", "max");
 ImplementSimpleFunction("ceil", [ "float" ], "float", "ceil");
@@ -187,6 +189,5 @@ export function generateIntrinsicFunction(name: string, args: string[]): { code:
         }
     } else {
         throw new Error(`intrinsic function ${name} is not defined.`);
-        // return `${name}(${args.join(", ")})`;
     }
 }

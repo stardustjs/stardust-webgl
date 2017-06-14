@@ -30,8 +30,7 @@ class WebGLPlatformMarkProgram {
         mode: GenerateMode
     ) {
         this._GL = GL;
-        let generator = new Generator(viewType, mode);
-        generator.compileSpecification(spec, shader, asUniform);
+        let generator = new Generator(spec, shader, asUniform, viewType, mode);
         this._program = WebGLUtils.compileProgram(this._GL,
             generator.getVertexCode(),
             generator.getFragmentCode()

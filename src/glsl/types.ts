@@ -1,4 +1,6 @@
-let typeName2WebGLTypeName: { [ name: string ]: string } = {
+// Declare the types
+
+let typeName2GLSLTypeName: { [ name: string ]: string } = {
     "float": "float",
     "int": "int",
     "bool": "bool",
@@ -16,7 +18,7 @@ let typeName2WebGLTypeName: { [ name: string ]: string } = {
 };
 
 export function convertTypeName(name: string): string {
-    return typeName2WebGLTypeName[name];
+    return typeName2GLSLTypeName[name];
 }
 
 export function convertConstant(type: string, value: number | number[]): string {
@@ -36,6 +38,9 @@ export function convertConstant(type: string, value: number | number[]): string 
         return "vec3(" + (value as number[]).join(", ") + ")";
     }
     if(type == "Vector4") {
+        return "vec4(" + (value as number[]).join(", ") + ")";
+    }
+    if(type == "Quaternion") {
         return "vec4(" + (value as number[]).join(", ") + ")";
     }
     if(type == "Color") {
