@@ -9,7 +9,7 @@
   "version": "0.1.0",
   "repository": {
     "type": "git",
-    "url": "git@github.com:stardust-vis/stardust-webgl.git"
+    "url": "https://github.com/stardustjs/stardust-webgl.git"
   },
   "main": "dist/stardust-webgl.js",
   "typings": "dist/stardust-webgl.d.ts",
