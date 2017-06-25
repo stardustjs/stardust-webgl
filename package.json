@@ -13,6 +13,9 @@
   },
   "main": "dist/stardust-webgl.js",
   "typings": "dist/stardust-webgl.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p src",
     "prepublish": "npm run build",
