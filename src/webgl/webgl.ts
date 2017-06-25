@@ -99,7 +99,13 @@ class WebGLPlatformMarkProgram {
             GL.texImage2D(GL.TEXTURE_2D, 0, GL.RGBA, newData.width, newData.height, 0, GL.RGBA, GL.FLOAT, newData.data);
             GL.bindTexture(GL.TEXTURE_2D, null);
             this.use();
-            this.setUniform(name + "_length", types["int"], newData.width);
+            if(newData.dimensions == 1) {
+                this.setUniform(name + "_length", types["int"], newData.width);
+            }
+            if(newData.dimensions == 2) {
+                this.setUniform(name + "_width", types["int"], newData.width);
+                this.setUniform(name + "_height", types["int"], newData.height);
+            }
         }
     }
 
@@ -598,7 +604,7 @@ export class WebGLPlatform extends Platform {
     }
 
     public getPickingPixel(x: number, y: number): [ Mark, number ] {
-        if(x < 0 || y < 0 || x >= this._pickFramebufferWidth || y >= this._pickFramebufferHeight) {
+        if(this._pickMarks == null || x < 0 || y < 0 || x >= this._pickFramebufferWidth || y >= this._pickFramebufferHeight) {
             return null;
         }
         let GL = this._GL;

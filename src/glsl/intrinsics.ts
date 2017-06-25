@@ -178,7 +178,29 @@ ImplementFunction("clamp", [ "float" ], "float", (a) => `clamp(${a}, 0, 1)`);
 ImplementTypeConversion("float", "int", (a) => `int(${a})`);
 ImplementTypeConversion("int", "float", (a) => `float(${a})`);
 
-ImplementFunction("array", [ "Vector2Array", "float" ], "Vector2", (a, b) => `texture2D(${a}, vec2((${b} + 0.5) / float(${a}_length), 0.5)).xy`);
+
+ImplementFunction("array", [ "FloatArray", "float" ], "float", 
+    (a, b) => `texture2D(${a}, vec2((${b} + 0.5) / float(${a}_length), 0.5)).x`);
+ImplementFunction("array", [ "Vector2Array", "float" ], "Vector2", 
+    (a, b) => `texture2D(${a}, vec2((${b} + 0.5) / float(${a}_length), 0.5)).xy`);
+ImplementFunction("array", [ "Vector3Array", "float" ], "Vector3", 
+    (a, b) => `texture2D(${a}, vec2((${b} + 0.5) / float(${a}_length), 0.5)).xyz`);
+ImplementFunction("array", [ "Vector4Array", "float" ], "Vector4", 
+    (a, b) => `texture2D(${a}, vec2((${b} + 0.5) / float(${a}_length), 0.5)).xyzw`);
+ImplementFunction("array", [ "ColorArray", "float" ], "Color", 
+    (a, b) => `texture2D(${a}, vec2((${b} + 0.5) / float(${a}_length), 0.5)).rgba`);
+
+ImplementFunction("image", [ "FloatImage", "Vector2" ], "float", 
+    (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height))).x`);
+ImplementFunction("image", [ "Vector2Image", "Vector2" ], "Vector2", 
+    (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height))).xy`);
+ImplementFunction("image", [ "Vector3Image", "Vector2" ], "Vector3", 
+    (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height))).xyz`);
+ImplementFunction("image", [ "Vector4Image", "Vector2" ], "Vector4", 
+    (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height))).xyzw`);
+ImplementFunction("image", [ "ColorImage", "Vector2" ], "Color", 
+    (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height))).rgba`);
+
 
 export function generateIntrinsicFunction(name: string, args: string[]): { code: string, additionalCode: string } {
     if(intrinsicImplementations.has(name)) {

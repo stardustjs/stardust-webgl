@@ -30,6 +30,9 @@ export class GLSLVertexShaderGenerator extends ShaderGenerator {
         for (let name in sEmit.attributes) {
             this.addLine(`${this._parent._voutMapping.get(name)} = ${this.generateExpression(sEmit.attributes[name])};`);
         }
+        if (this._parent._mode == GenerateMode.PICK) {
+            this.addLine(`out_pick_index = vec4(s3_pick_index.rgb, s3_pick_index_alpha);`);
+        }
         let position = this._parent._voutMapping.get("position");
         switch (this._parent._spec.output["position"].type) {
             case "Vector2": {
@@ -62,7 +65,7 @@ export class Generator extends ProgramGenerator {
     public _vertex: GLSLVertexShaderGenerator;
     public _fragment: GLSLFragmentShaderGenerator;
 
-    private _mode: GenerateMode;
+    public _mode: GenerateMode;
     private _viewType: ViewType;
 
     private _vertexCode: string;
@@ -93,17 +96,8 @@ export class Generator extends ProgramGenerator {
         this._foutMapping = new Dictionary<string>();
 
         this._vertex.addLine("precision highp float;");
+        this._fragment.addLine("precision highp float;");
 
-        // Global attributes.
-        for (let name in spec.input) {
-            if (spec.input.hasOwnProperty(name)) {
-                if (asUniform(name)) {
-                    this._vertex.addUniform(name, spec.input[name].type);
-                } else {
-                    this._vertex.addAttribute(name, spec.input[name].type);
-                }
-            }
-        }
         if (this._mode == GenerateMode.PICK) {
             this._vertex.addAttribute("s3_pick_index", "Vector4");
             this._vertex.addUniform("s3_pick_index_alpha", "float");
@@ -155,7 +149,19 @@ export class Generator extends ProgramGenerator {
                 `)
             } break;
         }
+        // Input attributes.
+        for (let name in spec.input) {
+            if (spec.input.hasOwnProperty(name)) {
+                if (asUniform(name)) {
+                    this._vertex.addUniform(name, spec.input[name].type);
+                } else {
+                    this._vertex.addAttribute(name, spec.input[name].type);
+                }
+            }
+        }
+
         this._vertex.addLine("@additionalCode");
+
         // Output attributes.
         for (let name in spec.output) {
             if (spec.output.hasOwnProperty(name)) {
@@ -164,6 +170,24 @@ export class Generator extends ProgramGenerator {
                 this._vertex.addVarying(oname, spec.output[name].type);
             }
         }
+
+        // Fragment shader inputs
+        let fragment_passthrus: [string, string][] = []; // gname, input_name
+        for (let name in shader.input) {
+            if (shader.input.hasOwnProperty(name)) {
+                if (this.fragmentPassthru(name)) {
+                    let gname = this.getUnusedName(name);
+                    fragment_passthrus.push([gname, name]);
+                    this._vertex.addVarying(gname, shader.input[name].type);
+                    this._fragment.addVarying(gname, shader.input[name].type);
+                } else {
+                    let gname = this._voutMapping.get(name);
+                    this._fragment.addVarying(gname, shader.input[name].type);
+                }
+            }
+        }
+
+
         if (this._mode == GenerateMode.PICK) {
             this._vertex.addVarying("out_pick_index", "Vector4");
         }
@@ -192,21 +216,8 @@ export class Generator extends ProgramGenerator {
                 }
             `;
         } else {
+            // Input attributes.
 
-            this._fragment.addLine("precision highp float;");
-            // Global attributes.
-            for (let name in shader.input) {
-                if (shader.input.hasOwnProperty(name)) {
-                    if (spec.output[name]) {
-                        let oname = this._voutMapping.get(name);
-                        this._fragment.addVarying(oname, shader.input[name].type);
-                    } else {
-                        if (asUniform(name)) {
-                            this._fragment.addUniform(name, shader.input[name].type);
-                        }
-                    }
-                }
-            }
             // Output attributes.
             for (let name in shader.output) {
                 if (shader.output.hasOwnProperty(name)) {
@@ -227,10 +238,15 @@ export class Generator extends ProgramGenerator {
             }
             for (let name in shader.input) {
                 if (shader.input.hasOwnProperty(name)) {
-                    if (spec.output[name]) {
-                        this._fragment.addLine(`${convertTypeName(spec.input[name].type)} ${name} = ${this._voutMapping.get(name)};`);
+                    if (this.fragmentPassthru(name)) {
+                        fragment_passthrus.forEach(([gname, vname]) => {
+                            if (vname == name) {
+                                this._fragment.addLine(`${name} = ${gname};`);
+                            }
+                        });
                     } else {
-                        this._fragment.addLine(`${convertTypeName(spec.input[name].type)} ${name};`);
+                        this._fragment.addDeclaration(name, shader.input[name].type);
+                        this._fragment.addLine(`${name} = ${this._voutMapping.get(name)};`);
                     }
                 }
             }
