@@ -1,6 +1,5 @@
 import { Specification, Mark, Type, types, Binding, TextureBinding, TextureData, BindingType, ShiftBinding, Platform, PlatformMark, PlatformMarkData } from "stardust-core";
-import { flattenEmits } from "stardust-core";
-import { Dictionary, timeTask } from "stardust-core";
+import { Dictionary, Compiler } from "stardust-core";
 import { Generator, GenerateMode, ViewType } from "./generator";
 import { RuntimeError } from "stardust-core";
 import { Pose } from "stardust-core";
@@ -186,7 +185,7 @@ export class WebGLPlatformMark extends PlatformMark {
         this._spec = spec;
         this._shader = shader;
 
-        let flattenedInfo = flattenEmits(spec);
+        let flattenedInfo = Compiler.Transforms.flattenEmits(spec);
         this._specFlattened = flattenedInfo.specification;
         this._flattenedVertexIndexVariable = flattenedInfo.indexVariable;
         this._flattenedVertexCount = flattenedInfo.count

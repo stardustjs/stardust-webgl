@@ -1,4 +1,4 @@
-import { forEachIntrinsicFunction, forEachTypeConversion, getInternalName } from "stardust-core";
+import { Intrinsics } from "stardust-core";
 import { Dictionary } from "stardust-core";
 
 type IntrinsicImplementation = (...args: string[]) => string;
@@ -7,7 +7,7 @@ let intrinsicImplementations = new Dictionary<IntrinsicImplementation>();
 let intrinsicsCodeBase = new Dictionary<string>();
 
 function ImplementFunction(name: string, argTypes: string[], returnType: string, code: IntrinsicImplementation) {
-    let internalName = getInternalName({ name: name, argTypes: argTypes, returnType: returnType });
+    let internalName = Intrinsics.getInternalName({ name: name, argTypes: argTypes, returnType: returnType });
     intrinsicImplementations.set(internalName, code);
 }
 
@@ -16,7 +16,7 @@ function ImplementSimpleFunction(name: string, argTypes: string[], returnType: s
         return `${funcName}(${args.join(", ")})`;
     });
     if(funcCode) {
-        let internalName = getInternalName({ name: name, argTypes: argTypes, returnType: returnType });
+        let internalName = Intrinsics.getInternalName({ name: name, argTypes: argTypes, returnType: returnType });
         intrinsicsCodeBase.set(internalName, funcCode);
     }
 }
@@ -179,26 +179,26 @@ ImplementTypeConversion("float", "int", (a) => `int(${a})`);
 ImplementTypeConversion("int", "float", (a) => `float(${a})`);
 
 
-ImplementFunction("array", [ "FloatArray", "float" ], "float", 
+ImplementFunction("array", [ "FloatArray", "float" ], "float",
     (a, b) => `texture2D(${a}, vec2((${b} + 0.5) / float(${a}_length), 0.5)).x`);
-ImplementFunction("array", [ "Vector2Array", "float" ], "Vector2", 
+ImplementFunction("array", [ "Vector2Array", "float" ], "Vector2",
     (a, b) => `texture2D(${a}, vec2((${b} + 0.5) / float(${a}_length), 0.5)).xy`);
-ImplementFunction("array", [ "Vector3Array", "float" ], "Vector3", 
+ImplementFunction("array", [ "Vector3Array", "float" ], "Vector3",
     (a, b) => `texture2D(${a}, vec2((${b} + 0.5) / float(${a}_length), 0.5)).xyz`);
-ImplementFunction("array", [ "Vector4Array", "float" ], "Vector4", 
+ImplementFunction("array", [ "Vector4Array", "float" ], "Vector4",
     (a, b) => `texture2D(${a}, vec2((${b} + 0.5) / float(${a}_length), 0.5)).xyzw`);
-ImplementFunction("array", [ "ColorArray", "float" ], "Color", 
+ImplementFunction("array", [ "ColorArray", "float" ], "Color",
     (a, b) => `texture2D(${a}, vec2((${b} + 0.5) / float(${a}_length), 0.5)).rgba`);
 
-ImplementFunction("image", [ "FloatImage", "Vector2" ], "float", 
+ImplementFunction("image", [ "FloatImage", "Vector2" ], "float",
     (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height))).x`);
-ImplementFunction("image", [ "Vector2Image", "Vector2" ], "Vector2", 
+ImplementFunction("image", [ "Vector2Image", "Vector2" ], "Vector2",
     (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height))).xy`);
-ImplementFunction("image", [ "Vector3Image", "Vector2" ], "Vector3", 
+ImplementFunction("image", [ "Vector3Image", "Vector2" ], "Vector3",
     (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height))).xyz`);
-ImplementFunction("image", [ "Vector4Image", "Vector2" ], "Vector4", 
+ImplementFunction("image", [ "Vector4Image", "Vector2" ], "Vector4",
     (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height))).xyzw`);
-ImplementFunction("image", [ "ColorImage", "Vector2" ], "Color", 
+ImplementFunction("image", [ "ColorImage", "Vector2" ], "Color",
     (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height))).rgba`);
 
 
