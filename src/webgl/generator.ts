@@ -106,6 +106,9 @@ export class Generator extends ProgramGenerator {
             case ViewType.VIEW_2D: {
                 this._vertex.addUniform("s3_view_params", "Vector4");
                 this._vertex.addAdditionalCode(`
+                    vec3 s3_get_camera_direction(vec3 p) {
+                        return vec3(0, 0, 1);
+                    }
                     vec4 s3_render_vertex(vec3 p) {
                         return vec4(p.xy * s3_view_params.xy + s3_view_params.zw, 0.0, 1.0);
                     }
@@ -114,7 +117,18 @@ export class Generator extends ProgramGenerator {
             case ViewType.VIEW_3D: {
                 this._vertex.addUniform("s3_view_params", "Vector4");
                 this._vertex.addUniform("s3_view_position", "Vector3");
+                this._fragment.addUniform("s3_view_position", "Vector3");
                 this._vertex.addUniform("s3_view_rotation", "Vector4");
+                this._vertex.addAdditionalCode(`
+                    vec3 s3_get_camera_direction(vec3 p) {
+                        return normalize(s3_view_position - p);
+                    }
+                `);
+                this._fragment.addAdditionalCode(`
+                    vec3 s3_get_camera_direction(vec3 p) {
+                        return normalize(s3_view_position - p);
+                    }
+                `);
                 this._vertex.addAdditionalCode(`
                     vec4 s3_render_vertex(vec3 p) {
                         // Get position in view coordinates:
@@ -226,6 +240,7 @@ export class Generator extends ProgramGenerator {
                     this._fragment.addDeclaration(oname, shader.output[name].type);
                 }
             }
+            this._fragment.addLine("@additionalCode");
             // The main function.
             this._fragment.addLine("void main() {");
             this._fragment.indent();
