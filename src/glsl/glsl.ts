@@ -19,7 +19,7 @@ export class LinesGenerator {
     }
 
     public addNamedBlock(name: string, code: string) {
-        if(this._blocks.has(name)) {
+        if (this._blocks.has(name)) {
             this._blocks.set(name, this._blocks.get(name) + "\n" + code);
         } else {
             this._blocks.set(name, code);
@@ -40,8 +40,12 @@ export class LinesGenerator {
 
     public getCode(): string {
         return this._lines.map((line) => {
-            if(line[0] == "@" && this._blocks.has(line.substr(1))) {
-                return this._blocks.get(line.substr(1));
+            if (line[0] == "@") {
+                if (this._blocks.has(line.substr(1))) {
+                    return this._blocks.get(line.substr(1));
+                } else {
+                    return "";
+                }
             } else {
                 return line;
             }
@@ -62,7 +66,7 @@ export class ShaderGenerator extends LinesGenerator {
     }
 
     public addDeclaration(name: string, type: string, modifier: string = null) {
-        if(modifier == null) {
+        if (modifier == null) {
             this.addLine(`${convertTypeName(type)} ${name};`);
         } else {
             this.addLine(`${modifier} ${convertTypeName(type)} ${name};`);
@@ -70,7 +74,7 @@ export class ShaderGenerator extends LinesGenerator {
     }
 
     public addArrayDeclaration(name: string, type: string, count: number = 1, modifier: string = null) {
-        if(modifier == "null") {
+        if (modifier == "null") {
             this.addLine(`${convertTypeName(type)}[${count}] ${name};`);
         } else {
             this.addLine(`${modifier} ${convertTypeName(type)}[${count}] ${name};`);
@@ -79,10 +83,10 @@ export class ShaderGenerator extends LinesGenerator {
 
     public addUniform(name: string, type: string) {
         this.addLine(`uniform ${convertTypeName(type)} ${name};`);
-        if(type == "Vector2Array" || type == "FloatArray" || type == "Vector3Array" || type == "Vector4Array" || type == "ColorArray") {
+        if (type == "Vector2Array" || type == "FloatArray" || type == "Vector3Array" || type == "Vector4Array" || type == "ColorArray") {
             this.addLine(`uniform int ${name}_length;`);
         }
-        if(type == "Vector2Image" || type == "FloatImage" || type == "Vector3Image" || type == "Vector4Image" || type == "Image") {
+        if (type == "Vector2Image" || type == "FloatImage" || type == "Vector3Image" || type == "Vector4Image" || type == "Image") {
             this.addLine(`uniform int ${name}_width;`);
             this.addLine(`uniform int ${name}_height;`);
         }
@@ -105,7 +109,7 @@ export class ShaderGenerator extends LinesGenerator {
     }
 
     public generateExpression(expr: Specification.Expression): string {
-        switch(expr.type) {
+        switch (expr.type) {
             case "constant": {
                 let eConstant = expr as Specification.ExpressionConstant;
                 return convertConstant(eConstant.valueType, eConstant.value);
@@ -118,7 +122,7 @@ export class ShaderGenerator extends LinesGenerator {
                 let eFunction = expr as Specification.ExpressionFunction;
                 let args = eFunction.arguments.map((arg) => this.generateExpression(arg));
                 let { code, additionalCode } = generateIntrinsicFunction(eFunction.functionName, args);
-                if(additionalCode != null) {
+                if (additionalCode != null) {
                     this.addAdditionalCode(additionalCode);
                 }
                 return code;
@@ -131,7 +135,7 @@ export class ShaderGenerator extends LinesGenerator {
     }
 
     public addStatement(stat: Specification.Statement) {
-        switch(stat.type) {
+        switch (stat.type) {
             case "assign": {
                 let sAssign = stat as Specification.StatementAssign;
                 let expr = this.generateExpression(sAssign.expression)
@@ -139,7 +143,7 @@ export class ShaderGenerator extends LinesGenerator {
             } break;
             case "condition": {
                 let sCondition = stat as Specification.StatementCondition;
-                if(sCondition.trueStatements.length > 0 && sCondition.falseStatements.length > 0) {
+                if (sCondition.trueStatements.length > 0 && sCondition.falseStatements.length > 0) {
                     this.addLine(`if(${this.generateExpression(sCondition.condition)}) {`);
                     this.indent();
                     this.addStatements(sCondition.trueStatements);
@@ -149,13 +153,13 @@ export class ShaderGenerator extends LinesGenerator {
                     this.addStatements(sCondition.falseStatements);
                     this.unindent();
                     this.addLine(`}`);
-                } else if(sCondition.trueStatements.length > 0) {
+                } else if (sCondition.trueStatements.length > 0) {
                     this.addLine(`if(${this.generateExpression(sCondition.condition)}) {`);
                     this.indent();
                     this.addStatements(sCondition.trueStatements);
                     this.unindent();
                     this.addLine(`}`);
-                } else if(sCondition.falseStatements.length > 0) {
+                } else if (sCondition.falseStatements.length > 0) {
                     this.addLine(`if(!${this.generateExpression(sCondition.condition)}) {`);
                     this.indent();
                     this.addStatements(sCondition.trueStatements);
@@ -192,7 +196,7 @@ export class ProgramGenerator {
     public _spec: Specification.Mark;
     public _shader: Specification.Shader;
     public _asUniform: (name: string) => boolean;
-    public _names: { [ name: string ]: boolean };
+    public _names: { [name: string]: boolean };
 
     constructor(
         spec: Specification.Mark,
@@ -206,8 +210,8 @@ export class ProgramGenerator {
         // Make a record of existing names
         this._names = {};
         let record_names = (map: { [name: string]: any }) => {
-            for(let name in map) {
-                if(map.hasOwnProperty(name)) {
+            for (let name in map) {
+                if (map.hasOwnProperty(name)) {
                     this._names[name] = true;
                 }
             }
@@ -221,9 +225,9 @@ export class ProgramGenerator {
 
     public getUnusedName(hint: string): string {
         let index = 0;
-        while(true) {
+        while (true) {
             let candidate = "s3" + hint + index.toString();
-            if(this._names[candidate] === true) {
+            if (this._names[candidate] === true) {
                 index += 1;
                 continue;
             }

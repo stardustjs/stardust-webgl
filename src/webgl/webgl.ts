@@ -1,9 +1,10 @@
-import { Specification, Mark, Type, types, Binding, TextureBinding, TextureData, BindingType, ShiftBinding, Platform, PlatformMark, PlatformMarkData } from "stardust-core";
+import { Specification, Mark, Type, types, Binding, TextureBinding, TextureData, BindingType, ShiftBinding, Platform, PlatformMark, PlatformMarkData, Vector3 } from "stardust-core";
 import { Dictionary, Compiler } from "stardust-core";
 import { Generator, GenerateMode, ViewType } from "./generator";
 import { RuntimeError } from "stardust-core";
 import { Pose } from "stardust-core";
 import * as WebGLUtils from "./webglutils";
+import { getDefaultDevicePixelRatio } from "./helpers";
 
 interface TextureCacheData {
     unit: number;
@@ -46,20 +47,20 @@ class WebGLPlatformMarkProgram {
 
     public setUniform(name: string, type: Type, value: number | number[]) {
         let location = this.getUniformLocation(name);
-        if(location == null) return;
+        if (location == null) return;
         let GL = this._GL;
-        if(type.primitive == "float") {
+        if (type.primitive == "float") {
             let va = value as number[];
-            switch(type.primitiveCount) {
+            switch (type.primitiveCount) {
                 case 1: GL.uniform1f(location, value as number); break;
                 case 2: GL.uniform2f(location, va[0], va[1]); break;
                 case 3: GL.uniform3f(location, va[0], va[1], va[2]); break;
                 case 4: GL.uniform4f(location, va[0], va[1], va[2], va[3]); break;
             }
         }
-        if(type.primitive == "int") {
+        if (type.primitive == "int") {
             let va = value as number[];
-            switch(type.primitiveCount) {
+            switch (type.primitiveCount) {
                 case 1: GL.uniform1i(location, value as number); break;
                 case 2: GL.uniform2i(location, va[0], va[1]); break;
                 case 3: GL.uniform3i(location, va[0], va[1], va[2]); break;
@@ -70,7 +71,7 @@ class WebGLPlatformMarkProgram {
 
     public setTexture(name: string, texture: TextureBinding) {
         let GL = this._GL;
-        if(!this._textures.has(name)) {
+        if (!this._textures.has(name)) {
             let newTexture = GL.createTexture();
             let unit = this._currentTextureUnit++;
             this._textures.set(name, {
@@ -89,7 +90,7 @@ class WebGLPlatformMarkProgram {
         }
         let cache = this._textures.get(name);
         let newData = texture.getTextureData();
-        if(cache.data == newData) {
+        if (cache.data == newData) {
             return;
         } else {
             cache.data = newData;
@@ -98,10 +99,10 @@ class WebGLPlatformMarkProgram {
             GL.texImage2D(GL.TEXTURE_2D, 0, GL.RGBA, newData.width, newData.height, 0, GL.RGBA, GL.FLOAT, newData.data);
             GL.bindTexture(GL.TEXTURE_2D, null);
             this.use();
-            if(newData.dimensions == 1) {
+            if (newData.dimensions == 1) {
                 this.setUniform(name + "_length", types["int"], newData.width);
             }
-            if(newData.dimensions == 2) {
+            if (newData.dimensions == 2) {
                 this.setUniform(name + "_width", types["int"], newData.width);
                 this.setUniform(name + "_height", types["int"], newData.height);
             }
@@ -125,7 +126,7 @@ class WebGLPlatformMarkProgram {
     }
 
     public getUniformLocation(name: string): WebGLUniformLocation {
-        if(this._uniformLocations.has(name)) {
+        if (this._uniformLocations.has(name)) {
             return this._uniformLocations.get(name);
         } else {
             let location = this._GL.getUniformLocation(this._program, name);
@@ -134,11 +135,11 @@ class WebGLPlatformMarkProgram {
         }
     }
     public getAttribLocation(name: string): number {
-        if(this._attribLocations.has(name)) {
+        if (this._attribLocations.has(name)) {
             return this._attribLocations.get(name);
         } else {
             let location = this._GL.getAttribLocation(this._program, name);
-            if(location < 0) location = null;
+            if (location < 0) location = null;
             this._attribLocations.set(name, location);
             return location;
         }
@@ -147,7 +148,7 @@ class WebGLPlatformMarkProgram {
 
 export class WebGLPlatformMarkData extends PlatformMarkData {
     public buffers: Dictionary<WebGLBuffer>;
-    public ranges: [ number, number ][];
+    public ranges: [number, number][];
 }
 
 export class WebGLPlatformMark extends PlatformMark {
@@ -209,13 +210,13 @@ export class WebGLPlatformMark extends PlatformMark {
         this.initializeUniforms();
     }
     public initializeUniforms() {
-        for(let name in this._specFlattened.input) {
-            if(this.isUniform(name)) {
+        for (let name in this._specFlattened.input) {
+            if (this.isUniform(name)) {
                 let binding = this._bindings.get(name);
-                if(binding.bindingType == BindingType.VALUE) {
+                if (binding.bindingType == BindingType.VALUE) {
                     this.updateUniform(name, binding.specValue);
                 }
-                if(binding.bindingType == BindingType.TEXTURE) {
+                if (binding.bindingType == BindingType.TEXTURE) {
                     this.updateTexture(name, binding.textureValue);
                 }
             }
@@ -226,15 +227,15 @@ export class WebGLPlatformMark extends PlatformMark {
         let data = new WebGLPlatformMarkData();
         data.buffers = new Dictionary<WebGLBuffer>();;
         this._bindings.forEach((binding, name) => {
-            if(!this.isUniform(name)) {
+            if (!this.isUniform(name)) {
                 let location = this._program.getAttribLocation(name);
-                if(location != null) {
+                if (location != null) {
                     data.buffers.set(name, GL.createBuffer());
                 }
             }
         });
         data.buffers.set(this._flattenedVertexIndexVariable, GL.createBuffer());
-        if(this._programPick) {
+        if (this._programPick) {
             data.buffers.set("s3_pick_index", GL.createBuffer());
         }
         data.ranges = [];
@@ -243,9 +244,9 @@ export class WebGLPlatformMark extends PlatformMark {
     // Is the input attribute compiled as uniform?
     public isUniform(name: string): boolean {
         // Extra variables we add are always not uniforms.
-        if(name == this._flattenedVertexIndexVariable) return false;
-        if(this._bindings.get(name) == null) {
-            if(this._shiftBindings.get(name) == null) {
+        if (name == this._flattenedVertexIndexVariable) return false;
+        if (this._bindings.get(name) == null) {
+            if (this._shiftBindings.get(name) == null) {
                 throw new RuntimeError(`attribute ${name} is not specified.`);
             } else {
                 return this._bindings.get(this._shiftBindings.get(name).name).bindingType != BindingType.FUNCTION;
@@ -260,14 +261,14 @@ export class WebGLPlatformMark extends PlatformMark {
         let type = binding.valueType;
         this._program.use();
         this._program.setUniform(name, type, value);
-        if(this._programPick) {
+        if (this._programPick) {
             this._programPick.use();
             this._programPick.setUniform(name, type, value);
         }
     }
     public updateTexture(name: string, value: TextureBinding) {
         this._program.setTexture(name, value);
-        if(this._programPick) {
+        if (this._programPick) {
             this._programPick.setTexture(name, value);
         }
     }
@@ -286,20 +287,20 @@ export class WebGLPlatformMark extends PlatformMark {
         let totalCount = 0;
         datas.forEach((data) => {
             let n = data.length;
-            if(n == 0) {
+            if (n == 0) {
                 buffers.ranges.push(null);
                 return;
             } else {
                 let c1 = totalCount;
                 totalCount += n + repeatBegin + repeatEnd;
                 let c2 = totalCount;
-                buffers.ranges.push([ c1 * rep, c2 * rep ]);
+                buffers.ranges.push([c1 * rep, c2 * rep]);
             }
         });
 
         this._bindings.forEach((binding, name) => {
             let buffer = buffers.buffers.get(name);
-            if(buffer == null) return;
+            if (buffer == null) return;
 
             let type = binding.valueType;
             let array = new Float32Array(type.primitiveCount * totalCount * rep);
@@ -307,15 +308,15 @@ export class WebGLPlatformMark extends PlatformMark {
             let multiplier = type.primitiveCount * rep;
 
             datas.forEach((data) => {
-                if(data.length == 0) return;
-                for(let i = 0; i < repeatBegin; i++) {
-                    binding.fillBinary([ data[0] ], rep, array.subarray(currentIndex, currentIndex + multiplier));
+                if (data.length == 0) return;
+                for (let i = 0; i < repeatBegin; i++) {
+                    binding.fillBinary([data[0]], rep, array.subarray(currentIndex, currentIndex + multiplier));
                     currentIndex += multiplier;
                 }
                 binding.fillBinary(data, rep, array.subarray(currentIndex, currentIndex + data.length * multiplier));
                 currentIndex += data.length * multiplier;
-                for(let i = 0; i < repeatEnd; i++) {
-                    binding.fillBinary([ data[data.length - 1] ], rep, array.subarray(currentIndex, currentIndex + multiplier));
+                for (let i = 0; i < repeatEnd; i++) {
+                    binding.fillBinary([data[data.length - 1]], rep, array.subarray(currentIndex, currentIndex + multiplier));
                     currentIndex += multiplier;
                 }
             });
@@ -325,15 +326,15 @@ export class WebGLPlatformMark extends PlatformMark {
         });
         // The vertex index attribute.
         let array = new Float32Array(totalCount * rep);
-        for(let i = 0; i < totalCount * rep; i++) {
+        for (let i = 0; i < totalCount * rep; i++) {
             array[i] = i % rep;
         }
         GL.bindBuffer(GL.ARRAY_BUFFER, buffers.buffers.get(this._flattenedVertexIndexVariable));
         GL.bufferData(GL.ARRAY_BUFFER, array, GL.STATIC_DRAW);
         // The pick index attribute.
-        if(this._programPick) {
+        if (this._programPick) {
             let array = new Float32Array(totalCount * rep * 4);
-            for(let i = 0; i < totalCount * rep; i++) {
+            for (let i = 0; i < totalCount * rep; i++) {
                 let index = Math.floor(i / rep);
                 array[i * 4 + 0] = (index & 0xff) / 255.0;
                 array[i * 4 + 1] = ((index & 0xff00) >> 8) / 255.0;
@@ -348,14 +349,14 @@ export class WebGLPlatformMark extends PlatformMark {
 
     // Render the graphics.
     public renderBase(buffers: WebGLPlatformMarkData, mode: GenerateMode, onRender: (i: number) => void): void {
-        if(buffers.ranges.length > 0) {
+        if (buffers.ranges.length > 0) {
             let GL = this._GL;
             let spec = this._specFlattened;
             let bindings = this._bindings;
 
             // Decide which program to use
             let program = this._program;
-            if(mode == GenerateMode.PICK) {
+            if (mode == GenerateMode.PICK) {
                 program = this._programPick;
             }
 
@@ -364,15 +365,15 @@ export class WebGLPlatformMark extends PlatformMark {
             let minOffset = 0;
             let maxOffset = 0;
             this._shiftBindings.forEach((shift, name) => {
-                if(shift.offset > maxOffset) maxOffset = shift.offset;
-                if(shift.offset < minOffset) minOffset = shift.offset;
+                if (shift.offset > maxOffset) maxOffset = shift.offset;
+                if (shift.offset < minOffset) minOffset = shift.offset;
             });
 
             // Assign attributes to buffers
-            for(let name in spec.input) {
+            for (let name in spec.input) {
                 let attributeLocation = program.getAttribLocation(name);
-                if(attributeLocation == null) continue;
-                if(this._shiftBindings.has(name)) {
+                if (attributeLocation == null) continue;
+                if (this._shiftBindings.has(name)) {
                     let shift = this._shiftBindings.get(name);
                     GL.bindBuffer(GL.ARRAY_BUFFER, buffers.buffers.get(shift.name));
                     GL.enableVertexAttribArray(attributeLocation);
@@ -384,7 +385,7 @@ export class WebGLPlatformMark extends PlatformMark {
                 } else {
                     GL.bindBuffer(GL.ARRAY_BUFFER, buffers.buffers.get(name));
                     GL.enableVertexAttribArray(attributeLocation);
-                    if(name == this._flattenedVertexIndexVariable) {
+                    if (name == this._flattenedVertexIndexVariable) {
                         GL.vertexAttribPointer(attributeLocation,
                             1, GL.FLOAT, false, 0, 4 * (-minOffset) * this._flattenedVertexCount
                         );
@@ -399,7 +400,7 @@ export class WebGLPlatformMark extends PlatformMark {
             }
 
             // For pick mode, assign the pick index buffer
-            if(mode == GenerateMode.PICK) {
+            if (mode == GenerateMode.PICK) {
                 let attributeLocation = program.getAttribLocation("s3_pick_index");
                 GL.bindBuffer(GL.ARRAY_BUFFER, buffers.buffers.get("s3_pick_index"));
                 GL.enableVertexAttribArray(attributeLocation);
@@ -412,7 +413,8 @@ export class WebGLPlatformMark extends PlatformMark {
             // Set view uniforms
             let viewInfo = this._platform.viewInfo;
             let pose = this._platform.pose;
-            switch(viewInfo.type) {
+            let cameraPosition = this._platform.cameraPosition;
+            switch (viewInfo.type) {
                 case ViewType.VIEW_2D: {
                     GL.uniform4f(program.getUniformLocation("s3_view_params"),
                         2.0 / viewInfo.width, -2.0 / viewInfo.height, -1, +1
@@ -425,7 +427,7 @@ export class WebGLPlatformMark extends PlatformMark {
                         (viewInfo.near + viewInfo.far) / (viewInfo.near - viewInfo.far),
                         (2.0 * viewInfo.near * viewInfo.far) / (viewInfo.near - viewInfo.far)
                     );
-                    if(pose) {
+                    if (pose) {
                         // Rotation and position.
                         GL.uniform4f(program.getUniformLocation("s3_view_rotation"),
                             pose.rotation.x, pose.rotation.y, pose.rotation.z, pose.rotation.w
@@ -441,11 +443,14 @@ export class WebGLPlatformMark extends PlatformMark {
                             0, 0, 0
                         );
                     }
+                    GL.uniform3f(program.getUniformLocation("s3_camera_position"),
+                        cameraPosition.x, cameraPosition.y, cameraPosition.z
+                    );
                 } break;
                 case ViewType.VIEW_WEBVR: {
                     GL.uniformMatrix4fv(program.getUniformLocation("s3_view_matrix"), false, viewInfo.viewMatrix);
                     GL.uniformMatrix4fv(program.getUniformLocation("s3_projection_matrix"), false, viewInfo.projectionMatrix);
-                    if(pose) {
+                    if (pose) {
                         // Rotation and position.
                         GL.uniform4f(program.getUniformLocation("s3_view_rotation"),
                             pose.rotation.x, pose.rotation.y, pose.rotation.z, pose.rotation.w
@@ -461,11 +466,14 @@ export class WebGLPlatformMark extends PlatformMark {
                             0, 0, 0
                         );
                     }
+                    GL.uniform3f(program.getUniformLocation("s3_camera_position"),
+                        cameraPosition.x, cameraPosition.y, cameraPosition.z
+                    );
                 } break;
             }
 
             // For pick, set the mark index
-            if(mode == GenerateMode.PICK) {
+            if (mode == GenerateMode.PICK) {
                 GL.uniform1f(program.getUniformLocation("s3_pick_index_alpha"),
                     this._pickIndex / 255.0
                 );
@@ -475,10 +483,10 @@ export class WebGLPlatformMark extends PlatformMark {
 
             // Draw arrays
             buffers.ranges.forEach((range, index) => {
-                if(onRender) {
+                if (onRender) {
                     onRender(index);
                 }
-                if(range != null) {
+                if (range != null) {
                     program.use();
                     program.bindTextures();
                     GL.drawArrays(GL.TRIANGLES, range[0], range[1] - range[0] - (maxOffset - minOffset) * this._flattenedVertexCount);
@@ -488,14 +496,14 @@ export class WebGLPlatformMark extends PlatformMark {
             program.unbindTextures();
 
             // Unbind attributes
-            for(let name in spec.input) {
+            for (let name in spec.input) {
                 let attributeLocation = program.getAttribLocation(name);
-                if(attributeLocation != null) {
+                if (attributeLocation != null) {
                     GL.disableVertexAttribArray(attributeLocation);
                 }
             }
             // Unbind the pick index buffer
-            if(mode == GenerateMode.PICK) {
+            if (mode == GenerateMode.PICK) {
                 let attributeLocation = program.getAttribLocation("s3_pick_index");
                 GL.disableVertexAttribArray(attributeLocation);
             }
@@ -507,7 +515,7 @@ export class WebGLPlatformMark extends PlatformMark {
     }
 
     public render(buffers: PlatformMarkData, onRender: (i: number) => void) {
-        if(this._platform.renderMode == GenerateMode.PICK) {
+        if (this._platform.renderMode == GenerateMode.PICK) {
             this.setPickIndex(this._platform.assignPickIndex(this._mark));
         }
         this.renderBase(buffers as WebGLPlatformMarkData, this._platform.renderMode, onRender);
@@ -530,20 +538,23 @@ export class WebGLPlatform extends Platform {
     protected _GL: WebGLRenderingContext;
     protected _viewInfo: WebGLViewInfo;
     protected _pose: Pose;
+    protected _cameraPosition: Vector3;
     protected _renderMode: GenerateMode;
 
     constructor(GL: WebGLRenderingContext) {
         super();
         this._GL = GL;
         this.set2DView(500, 500);
+        this.setCameraPosition(new Vector3());
         this.setPose(new Pose());
         this._renderMode = GenerateMode.NORMAL;
 
         this._pickFramebuffer = null;
     }
 
-    public get viewInfo(): WebGLViewInfo { return this._viewInfo; };
-    public get pose(): Pose { return this._pose; };
+    public get viewInfo(): WebGLViewInfo { return this._viewInfo; }
+    public get pose(): Pose { return this._pose; }
+    public get cameraPosition(): Vector3 { return this._cameraPosition; };
     public get renderMode(): GenerateMode { return this._renderMode; }
 
     protected _pickFramebuffer: WebGLFramebuffer;
@@ -553,7 +564,7 @@ export class WebGLPlatform extends Platform {
     protected _pickMarks: Mark[];
 
     public getPickFramebuffer(width: number, height: number): WebGLFramebuffer {
-        if(this._pickFramebuffer == null || width != this._pickFramebufferWidth || height != this._pickFramebufferHeight) {
+        if (this._pickFramebuffer == null || width != this._pickFramebufferWidth || height != this._pickFramebufferHeight) {
             let GL = this._GL;
             this._pickFramebuffer = GL.createFramebuffer();
             this._pickFramebufferWidth = width;
@@ -586,7 +597,7 @@ export class WebGLPlatform extends Platform {
 
     public assignPickIndex(mark: Mark): number {
         let idx = this._pickMarks.indexOf(mark);
-        if(idx >= 0) {
+        if (idx >= 0) {
             return idx;
         } else {
             let num = this._pickMarks.length;
@@ -602,8 +613,8 @@ export class WebGLPlatform extends Platform {
         this._renderMode = GenerateMode.NORMAL;
     }
 
-    public getPickingPixel(x: number, y: number): [ Mark, number ] {
-        if(this._pickMarks == null || x < 0 || y < 0 || x >= this._pickFramebufferWidth || y >= this._pickFramebufferHeight) {
+    public getPickingPixel(x: number, y: number): [Mark, number] {
+        if (this._pickMarks == null || x < 0 || y < 0 || x >= this._pickFramebufferWidth || y >= this._pickFramebufferHeight) {
             return null;
         }
         let GL = this._GL;
@@ -613,8 +624,8 @@ export class WebGLPlatform extends Platform {
         GL.readPixels(x, this._pickFramebufferHeight - 1 - y, 1, 1, GL.RGBA, GL.UNSIGNED_BYTE, data);
         GL.bindFramebuffer(GL.FRAMEBUFFER, null);
         let offset = (data[0]) + (data[1] << 8) + (data[2] << 16);
-        if(offset >= 16777215) return null;
-        return [ this._pickMarks[data[3]], offset ];
+        if (offset >= 16777215) return null;
+        return [this._pickMarks[data[3]], offset];
     }
 
     public set2DView(width: number, height: number) {
@@ -643,6 +654,10 @@ export class WebGLPlatform extends Platform {
         };
     }
 
+    public setCameraPosition(cameraPosition: Vector3) {
+        this._cameraPosition = cameraPosition;
+    }
+
     public setPose(pose: Pose) {
         this._pose = pose;
     }
@@ -664,7 +679,7 @@ export class WebGLCanvasPlatform2D extends WebGLPlatform {
         try {
             GL.getExtension("OES_texture_float");
             GL.getExtension("OES_texture_float_linear");
-        } catch(e) {
+        } catch (e) {
         }
         super(GL);
         this._canvas = canvas;
@@ -676,7 +691,7 @@ export class WebGLCanvasPlatform2D extends WebGLPlatform {
         GL.disable(GL.CULL_FACE);
         GL.blendFuncSeparate(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA, GL.ONE, GL.ONE_MINUS_SRC_ALPHA);
 
-        this._pixelRatio = 2;
+        this._pixelRatio = getDefaultDevicePixelRatio();
         this.resize(width, height);
     }
 
@@ -702,7 +717,7 @@ export class WebGLCanvasPlatform2D extends WebGLPlatform {
     }
 
     public clear(color?: number[]) {
-        if(color) {
+        if (color) {
             this._GL.clearColor(color[0], color[1], color[2], color[3] != null ? color[3] : 1);
         }
         this._GL.clear(this._GL.COLOR_BUFFER_BIT | this._GL.DEPTH_BUFFER_BIT);
@@ -763,7 +778,7 @@ export class WebGLCanvasPlatform3D extends WebGLPlatform {
     }
 
     public clear(color?: number[]) {
-        if(color) {
+        if (color) {
             this._GL.clearColor(color[0], color[1], color[2], color[3] != null ? color[3] : 1);
         }
         this._GL.clear(this._GL.COLOR_BUFFER_BIT | this._GL.DEPTH_BUFFER_BIT);
@@ -789,7 +804,7 @@ export class WebGLCanvasPlatformWebVR extends WebGLPlatform {
         GL.disable(GL.CULL_FACE);
         GL.blendFuncSeparate(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA, GL.ONE, GL.ONE_MINUS_SRC_ALPHA);
 
-        this._pixelRatio = 2;
+        this._pixelRatio = getDefaultDevicePixelRatio();
         this.resize(width, height);
         this.setWebVRView([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
     }
@@ -819,7 +834,7 @@ export class WebGLCanvasPlatformWebVR extends WebGLPlatform {
     }
 
     public clear(color?: number[]) {
-        if(color) {
+        if (color) {
             this._GL.clearColor(color[0], color[1], color[2], color[3] != null ? color[3] : 1);
         }
         this._GL.clear(this._GL.COLOR_BUFFER_BIT | this._GL.DEPTH_BUFFER_BIT);

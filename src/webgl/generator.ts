@@ -106,9 +106,6 @@ export class Generator extends ProgramGenerator {
             case ViewType.VIEW_2D: {
                 this._vertex.addUniform("s3_view_params", "Vector4");
                 this._vertex.addAdditionalCode(`
-                    vec3 s3_get_camera_direction(vec3 p) {
-                        return vec3(0, 0, 1);
-                    }
                     vec4 s3_render_vertex(vec3 p) {
                         return vec4(p.xy * s3_view_params.xy + s3_view_params.zw, 0.0, 1.0);
                     }
@@ -119,16 +116,6 @@ export class Generator extends ProgramGenerator {
                 this._vertex.addUniform("s3_view_position", "Vector3");
                 this._fragment.addUniform("s3_view_position", "Vector3");
                 this._vertex.addUniform("s3_view_rotation", "Vector4");
-                this._vertex.addAdditionalCode(`
-                    vec3 s3_get_camera_direction(vec3 p) {
-                        return normalize(s3_view_position - p);
-                    }
-                `);
-                this._fragment.addAdditionalCode(`
-                    vec3 s3_get_camera_direction(vec3 p) {
-                        return normalize(s3_view_position - p);
-                    }
-                `);
                 this._vertex.addAdditionalCode(`
                     vec4 s3_render_vertex(vec3 p) {
                         // Get position in view coordinates:
@@ -163,6 +150,29 @@ export class Generator extends ProgramGenerator {
                 `)
             } break;
         }
+        if (this._viewType == ViewType.VIEW_2D) {
+            [this._vertex, this._fragment].forEach(x => x.addAdditionalCode(`
+                vec3 s3_get_camera_position() {
+                    return vec3(0, 0, 1);
+                }
+                vec3 s3_get_camera_direction(vec3 p) {
+                    return vec3(0, 0, 1);
+                }
+            `));
+        } else {
+            [this._vertex, this._fragment].forEach(x => {
+                x.addUniform("s3_camera_position", "Vector3");
+                x.addAdditionalCode(`
+                    vec3 s3_get_camera_position() {
+                        return s3_camera_position;
+                    }
+                    vec3 s3_get_camera_direction(vec3 p) {
+                        return normalize(s3_camera_position - p);
+                    }
+                `);
+            });
+        }
+
         // Input attributes.
         for (let name in spec.input) {
             if (spec.input.hasOwnProperty(name)) {
@@ -205,9 +215,11 @@ export class Generator extends ProgramGenerator {
         if (this._mode == GenerateMode.PICK) {
             this._vertex.addVarying("out_pick_index", "Vector4");
         }
+
         // The main function.
         this._vertex.addLine("void main() {");
         this._vertex.indent();
+
         // Define arguments.
         for (let name in spec.variables) {
             if (spec.variables.hasOwnProperty(name)) {

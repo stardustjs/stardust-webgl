@@ -202,7 +202,7 @@ ImplementFunction("image", ["ColorImage", "Vector2"], "Color",
     (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height))).rgba`);
 
 ImplementFunction("get_camera_position", [], "Vector3",
-    () => `s3_camera_position`);
+    () => `s3_get_camera_position()`);
 ImplementFunction("get_camera_direction", ["Vector3"], "Vector3",
     (a) => `s3_get_camera_direction(${a})`);
 
