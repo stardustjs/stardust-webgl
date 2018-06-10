@@ -200,13 +200,21 @@ export class Generator extends ProgramGenerator {
         for (let name in shader.input) {
             if (shader.input.hasOwnProperty(name)) {
                 if (this.fragmentPassthru(name)) {
-                    let gname = this.getUnusedName(name);
-                    fragment_passthrus.push([gname, name]);
-                    this._vertex.addVarying(gname, shader.input[name].type);
-                    this._fragment.addVarying(gname, shader.input[name].type);
+                    if (this._asUniform(name)) {
+                        this._fragment.addUniform(name, shader.input[name].type);
+                    } else {
+                        let gname = this.getUnusedName(name);
+                        fragment_passthrus.push([gname, name]);
+                        this._vertex.addVarying(gname, shader.input[name].type);
+                        this._fragment.addVarying(gname, shader.input[name].type);
+                    }
                 } else {
                     let gname = this._voutMapping.get(name);
-                    this._fragment.addVarying(gname, shader.input[name].type);
+                    if (gname) {
+                        this._fragment.addVarying(gname, shader.input[name].type);
+                    } else {
+                        this._fragment.addUniform(name, shader.input[name].type);
+                    }
                 }
             }
         }
@@ -272,8 +280,10 @@ export class Generator extends ProgramGenerator {
                             }
                         });
                     } else {
-                        this._fragment.addDeclaration(name, shader.input[name].type);
-                        this._fragment.addLine(`${name} = ${this._voutMapping.get(name)};`);
+                        if (this._voutMapping.get(name)) {
+                            this._fragment.addDeclaration(name, shader.input[name].type);
+                            this._fragment.addLine(`${name} = ${this._voutMapping.get(name)};`);
+                        }
                     }
                 }
             }

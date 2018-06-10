@@ -190,16 +190,18 @@ ImplementFunction("array", ["Vector4Array", "float"], "Vector4",
 ImplementFunction("array", ["ColorArray", "float"], "Color",
     (a, b) => `texture2D(${a}, vec2((${b} + 0.5) / float(${a}_length), 0.5)).rgba`);
 
+ImplementFunction("image", ["Image", "Vector2"], "Color",
+    (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height))`);
 ImplementFunction("image", ["FloatImage", "Vector2"], "float",
-    (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height))).x`);
+    (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height)).x`);
 ImplementFunction("image", ["Vector2Image", "Vector2"], "Vector2",
-    (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height))).xy`);
+    (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height)).xy`);
 ImplementFunction("image", ["Vector3Image", "Vector2"], "Vector3",
-    (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height))).xyz`);
+    (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height)).xyz`);
 ImplementFunction("image", ["Vector4Image", "Vector2"], "Vector4",
-    (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height))).xyzw`);
+    (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height)).xyzw`);
 ImplementFunction("image", ["ColorImage", "Vector2"], "Color",
-    (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height))).rgba`);
+    (a, b) => `texture2D(${a}, (${b} + 0.5) / vec2(${a}_width, ${a}_height)).rgba`);
 
 ImplementFunction("get_camera_position", [], "Vector3",
     () => `s3_get_camera_position()`);

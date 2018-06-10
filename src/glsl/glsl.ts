@@ -84,11 +84,11 @@ export class ShaderGenerator extends LinesGenerator {
     public addUniform(name: string, type: string) {
         this.addLine(`uniform ${convertTypeName(type)} ${name};`);
         if (type == "Vector2Array" || type == "FloatArray" || type == "Vector3Array" || type == "Vector4Array" || type == "ColorArray") {
-            this.addLine(`uniform int ${name}_length;`);
+            this.addLine(`uniform float ${name}_length;`);
         }
         if (type == "Vector2Image" || type == "FloatImage" || type == "Vector3Image" || type == "Vector4Image" || type == "Image") {
-            this.addLine(`uniform int ${name}_width;`);
-            this.addLine(`uniform int ${name}_height;`);
+            this.addLine(`uniform float ${name}_width;`);
+            this.addLine(`uniform float ${name}_height;`);
         }
     }
 

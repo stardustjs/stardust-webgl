@@ -96,15 +96,29 @@ class WebGLPlatformMarkProgram {
             cache.data = newData;
             // We need non-power-of-2 textures and floating point texture support.
             GL.bindTexture(GL.TEXTURE_2D, cache.texture);
-            GL.texImage2D(GL.TEXTURE_2D, 0, GL.RGBA, newData.width, newData.height, 0, GL.RGBA, GL.FLOAT, newData.data);
+            switch (newData.type) {
+                case "f32": {
+                    GL.texImage2D(GL.TEXTURE_2D, 0, GL.RGBA, newData.width, newData.height, 0, GL.RGBA, GL.FLOAT, newData.data as Float32Array);
+                    break;
+                }
+                case "u8": {
+                    GL.texImage2D(GL.TEXTURE_2D, 0, GL.RGBA, newData.width, newData.height, 0, GL.RGBA, GL.FLOAT, newData.data as Uint8ClampedArray);
+                    break;
+                }
+                case "HTMLImageElement":
+                case "HTMLCanvasElement": {
+                    GL.texImage2D(GL.TEXTURE_2D, 0, GL.RGBA, GL.RGBA, GL.FLOAT, newData.data as (HTMLImageElement | HTMLCanvasElement));
+                    break;
+                }
+            }
             GL.bindTexture(GL.TEXTURE_2D, null);
             this.use();
             if (newData.dimensions == 1) {
-                this.setUniform(name + "_length", types["int"], newData.width);
+                this.setUniform(name + "_length", types["float"], newData.width);
             }
             if (newData.dimensions == 2) {
-                this.setUniform(name + "_width", types["int"], newData.width);
-                this.setUniform(name + "_height", types["int"], newData.height);
+                this.setUniform(name + "_width", types["float"], newData.width);
+                this.setUniform(name + "_height", types["float"], newData.height);
             }
         }
     }

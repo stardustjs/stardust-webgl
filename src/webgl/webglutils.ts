@@ -25,6 +25,8 @@ export function compileProgram(GL: WebGLRenderingContext, vsCode: string, fsCode
     GL.attachShader(program, fsShader);
     GL.linkProgram(program);
     if(!GL.getProgramParameter(program, GL.LINK_STATUS)) {
+        console.log("Vertex shader code is:", vsCode);
+        console.log("Fragment shader code is:", fsCode);
         throw new RuntimeError(`could not link shader: ${GL.getProgramInfoLog(program)}`);
     }
 

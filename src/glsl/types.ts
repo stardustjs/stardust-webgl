@@ -11,6 +11,7 @@ let typeName2GLSLTypeName: { [ name: string ]: string } = {
     "Matrix4": "mat4",
     "Quaternion": "vec4",
     "Color": "vec4",
+    "Image": "sampler2D",
     "FloatArray": "sampler2D",
     "Vector2Array": "sampler2D",
     "Vector3Array": "sampler2D",
