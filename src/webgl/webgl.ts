@@ -274,10 +274,10 @@ export class WebGLPlatformMark extends PlatformMark {
         let binding = this._bindings.get(name);
         let type = binding.valueType;
         this._program.use();
-        this._program.setUniform(name, type, value);
+        this._program.setUniform(name, type, value as number | number[]);
         if (this._programPick) {
             this._programPick.use();
-            this._programPick.setUniform(name, type, value);
+            this._programPick.setUniform(name, type, value as number | number[]);
         }
     }
     public updateTexture(name: string, value: TextureBinding) {

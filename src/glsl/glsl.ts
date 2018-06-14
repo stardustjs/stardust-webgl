@@ -112,7 +112,7 @@ export class ShaderGenerator extends LinesGenerator {
         switch (expr.type) {
             case "constant": {
                 let eConstant = expr as Specification.ExpressionConstant;
-                return convertConstant(eConstant.valueType, eConstant.value);
+                return convertConstant(eConstant.valueType, eConstant.value as (number | number[]));
             }
             case "variable": {
                 let eVariable = expr as Specification.ExpressionVariable;
