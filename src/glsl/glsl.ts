@@ -179,6 +179,9 @@ export class ShaderGenerator extends LinesGenerator {
                 let sEmit = stat as Specification.StatementEmit;
                 this.addEmitStatement(sEmit);
             } break;
+            case "discard": {
+                this.addLine("discard;");
+            } break;
         }
     }
 
