@@ -1,3 +1,4 @@
-Stardust WebGL Library
+[Archived] Stardust WebGL Library
+====
 
-<https://stardustjs.github.io/>
+Please use the unified repo for further development: https://github.com/stardustjs/stardust
